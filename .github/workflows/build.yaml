@@ -1,0 +1,155 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch: ~
+
+env:
+  SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+  RELEASE_BRANCH: "release/${{ github.head_ref || github.ref_name }}"
+
+jobs:
+  create-release:
+    name: Build and push artifacts to release branch
+    runs-on: [ubuntu-latest]
+    if: ${{ !startsWith(github.head_ref || github.ref_name, 'release/') }}
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          path: source-folder
+
+      - name: Setup Node (PR Summary)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: source-folder/pr-summary/.node-version
+          cache: npm
+          cache-dependency-path: source-folder/pr-summary/package-lock.json
+      - name: Build  (PR Summary)
+        working-directory: source-folder/pr-summary
+        run: |
+          npm install --frozen-lockfile
+          npm run build
+          npm prune --omit=dev
+
+      - name: Setup Node (PR Review)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: source-folder/pr-review/.node-version
+          cache: npm
+          cache-dependency-path: source-folder/pr-review/package-lock.json
+      - name: Build  (PR Summary)
+        working-directory: source-folder/pr-review
+        run: |
+          npm install --frozen-lockfile
+          npm run build
+          npm prune --omit=dev
+
+      - name: If necessary, create release branch
+        working-directory: source-folder
+        run: |
+          if ! git fetch origin ${{ env.RELEASE_BRANCH }}; then
+            git switch --orphan ${{ env.RELEASE_BRANCH }} --discard-changes
+            git commit --allow-empty -m "Initial commit"
+            git push origin ${{ env.RELEASE_BRANCH }}
+            git switch ${{ env.SOURCE_BRANCH }} --discard-changes
+          fi
+
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+          path: release-folder
+          fetch-depth: 0
+      - name: Prepare fresh release branch
+        working-directory: source-folder
+        run: |
+          rm -rf ${{ github.workspace }}/release-folder/*
+          mkdir ${{ github.workspace }}/release-folder/pr-summary
+          mkdir ${{ github.workspace }}/release-folder/pr-review
+      - name: Copy build output from source branch to release branch (PR Summary)
+        working-directory: source-folder/pr-summary
+        run: |
+          cp action.yml dist ${{ github.workspace }}/release-folder --verbose --recursive
+      - name: Copy build output from source branch to release branch (PR Review)
+        working-directory: source-folder/pr-review
+        run: |
+          cp action.yml dist ${{ github.workspace }}/release-folder --verbose --recursive
+      - name: Commit and push build artifacts
+        working-directory: release-folder
+        run: |
+          git add -A
+          git commit -m "${{ github.event.number && format('PR-{0}', github.event.number) || join(github.event.commits.*.message, ', ') }}" || true
+          git push
+
+  testing:
+    name: Execute the AI-assisted action defined in this PR
+    runs-on: [ubuntu-latest]
+    needs: create-release
+    if: ${{ github.ref_name != 'main' }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+      - name: Run the AI-assisted action (PR Summary)
+        uses: ./pr-summary # action.yml is in the pr-summary folder of the release branch
+        with:
+          aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          exclude-files: package-lock.json
+          display-mode: comment-delta
+      - name: Run the AI-assisted action (PR Summary)
+        uses: ./pr-review # action.yml is in the pr-review folder of the release branch
+        with:
+          aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          exclude-files: package-lock.json
+          display-mode: review-comment-delta
+
+  update-tags:
+    name: Update semantic version tags
+    runs-on: [ubuntu-latest]
+    needs: create-release
+    if: ${{ github.ref_name == 'main' }}
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+      - name: Create tags for new version
+        run: |
+          set -x
+
+          : get latest semantic version tag
+          git fetch --tags
+          tag_format="^v?([0-9]+)\.([0-9]+)\.([0-9]+)$"
+          matching_tag_refs=$(git tag --list --sort=-committerdate | grep -E "$tag_format")
+          tag=$(head -n 1 <<< "$matching_tag_refs")
+
+          : stop if current commit is already tagged
+          [[ $(git rev-parse HEAD) == $(git rev-list -n 1 "$tag") ]] && exit 0
+
+          : update the version
+          [[ $tag =~ $tag_format ]] && major=${BASH_REMATCH[1]} && minor=${BASH_REMATCH[2]} && patch=${BASH_REMATCH[3]}
+          commit_log=$(git log -1)
+          commit_subject=$(git log -1 --pretty=%s); 
+          [[ $commit_log == *"[bot]"* ]] && part="patch" || part="minor"
+          grep -iq "#patch" <<< "$commit_subject" && part="patch"
+          grep -iq "#minor" <<< "$commit_subject" && part="minor"
+          grep -iq "#major" <<< "$commit_subject" && part="major"
+          [[ $part == "major" ]] && major=$((major + 1)) && minor=0 && patch=0
+          [[ $part == "minor" ]] && minor=$((minor + 1)) && patch=0
+          [[ $part == "patch" ]] && patch=$((patch + 1))
+
+          : create and push a tag with the new semantic version
+          tag="v$major.$minor.$patch"
+          git tag -f "$tag"
+          git push -f origin "$tag"
+
+          : create and push a tag with only the major version
+          tag="v$major"
+          git tag -f "$tag"
+          git push -f origin "$tag"
