@@ -1,0 +1,29 @@
+name: AI-assisted
+on:
+  pull_request:
+    types: [ready_for_review]
+
+jobs:
+  summary:
+    name: PR Summary
+    if: github.actor != 'ospo-renovate[bot]'
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: SAP/ai-assisted-github-actions/pr-summary@v3
+        with:
+          aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-4o
+          exclude-files: package-lock.json
+          display-mode: append
+          header-text: "---"
+
+  review:
+    name: PR Review
+    if: github.actor != 'ospo-renovate[bot]'
+    runs-on: [ubuntu-latest]
+    steps:
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
+        with:
+          aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-4o
+          exclude-files: package-lock.json
