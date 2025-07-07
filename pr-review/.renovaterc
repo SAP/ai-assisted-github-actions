@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "addLabels": [
+    "renovate"
+  ],
+  "configMigration": true,
+  "automerge": true,
+  "autoApprove": true,
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver",
+    ":pinDependencies",
+    ":pinDevDependencies"
+  ],
+  "packageRules": [
+    {
+      "groupName": "non-major dependencies",
+      "matchUpdateTypes": [
+        "patch",
+        "minor"
+      ]
+    },
+    {
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false,
+      "matchPackageNames": [
+        "/^@?octokit//",
+        "/^eslint$/"
+      ]
+    }
+  ],
+  "schedule": [
+    "every weekend"
+  ]
+}

@@ -1,0 +1,54 @@
+env:
+  node: true
+  es6: true
+
+ignorePatterns:
+  - dist/
+  - node_modules/
+
+plugins:
+  - "@typescript-eslint"
+  - sonarjs
+  - unicorn
+
+extends:
+  # Airbnb's ESLint config with TypeScript support
+  - airbnb
+  - airbnb-typescript
+  # ESLint recommended rules
+  - eslint:recommended
+  # Linting with Type Information from TypeScript (https://typescript-eslint.io/getting-started/typed-linting)
+  - plugin:@typescript-eslint/eslint-recommended
+  - plugin:@typescript-eslint/recommended
+  - plugin:@typescript-eslint/recommended-type-checked
+  - plugin:@typescript-eslint/stylistic-type-checked
+  # SonarJS rules to produce Clean Code by detecting bugs and suspicious patterns (https://github.com/SonarSource/eslint-plugin-sonarjs)
+  - plugin:sonarjs/recommended-legacy
+  # "More than 100 powerful ESLint rules"
+  - plugin:unicorn/recommended
+  # Turns off all rules that are unnecessary or might conflict with Prettier (https://github.com/prettier/eslint-config-prettier)
+  # (Make sure to put it last, so it gets the chance to override other configs.)
+  - prettier
+
+parser: "@typescript-eslint/parser" # typescript-eslint
+parserOptions:
+  ecmaVersion: 2023
+  sourceType: module
+  project: ./tsconfig.json # typescript-eslint
+
+root: true
+
+rules:
+  {
+    "import/extensions": "off",
+    "import/no-extraneous-dependencies": ["error", { "devDependencies": true }],
+    "import/prefer-default-export": "off",
+    "import/no-default-export": "error",
+    "unicorn/no-array-for-each": "off",
+    "unicorn/prefer-string-replace-all": "off",
+    "unicorn/prevent-abbreviations": "off",
+    "no-plusplus": "off",
+    "no-param-reassign": ["error", { "props": false }],
+    "unicorn/no-negated-condition": "off",
+    "@typescript-eslint/no-use-before-define": "off",
+  }
