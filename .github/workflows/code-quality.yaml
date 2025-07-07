@@ -8,10 +8,17 @@ on:
   workflow_dispatch: ~
 
 jobs:
+  strategy:
+    fail-fast: false
+    matrix:
+      include:
+        - path: pr-summary
+        - path: pr-review
+
   # Use ESLint to check for linting errors
   lintCheck:
     runs-on: [ubuntu-latest]
-    name: Linter
+    name: Linter (${{ matrix.path }})
     steps:
       - name: Checkout source branch
         uses: actions/checkout@v4
@@ -20,17 +27,17 @@ jobs:
         with:
           node-version: 18
           cache: npm
-          cache-dependency-path: pr-summary/package-lock.json
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
       - run: npm install --frozen-lockfile
-        working-directory: pr-summary
+        working-directory: ${{ matrix.path }}
       - name: Run ESLint
         run: npm run lint
-        working-directory: pr-summary
+        working-directory: ${{ matrix.path }}
 
   # Use Prettier to check for formatting errors
   formatCheck:
     runs-on: [ubuntu-latest]
-    name: Formatter
+    name: Formatter (${{ matrix.path }})
     steps:
       - name: Checkout source branch
         uses: actions/checkout@v4
@@ -39,9 +46,9 @@ jobs:
         with:
           node-version: 18
           cache: npm
-          cache-dependency-path: pr-summary/package-lock.json
+          cache-dependency-path: ${{ matrix.path }}/package-lock.json
       - run: npm install --frozen-lockfile
-        working-directory: pr-summary
+        working-directory: ${{ matrix.path }}
       - name: Run Prettier
         run: npm run prettier
-        working-directory: pr-summary
+        working-directory: ${{ matrix.path }}
