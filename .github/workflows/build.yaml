@@ -73,16 +73,14 @@ jobs:
         working-directory: source-folder
         run: |
           rm -rf ${{ github.workspace }}/release-folder/*
-          mkdir ${{ github.workspace }}/release-folder/pr-summary
-          mkdir ${{ github.workspace }}/release-folder/pr-review
       - name: Copy build output from source branch to release branch (PR Summary)
         working-directory: source-folder/pr-summary
         run: |
-          cp action.yml dist ${{ github.workspace }}/release-folder --verbose --recursive
+          cp action.yml dist ${{ github.workspace }}/release-folder/pr-summary --verbose --recursive
       - name: Copy build output from source branch to release branch (PR Review)
         working-directory: source-folder/pr-review
         run: |
-          cp action.yml dist ${{ github.workspace }}/release-folder --verbose --recursive
+          cp action.yml dist ${{ github.workspace }}/release-folder/pr-review --verbose --recursive
       - name: Commit and push build artifacts
         working-directory: release-folder
         run: |
