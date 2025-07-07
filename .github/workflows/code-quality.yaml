@@ -8,17 +8,14 @@ on:
   workflow_dispatch: ~
 
 jobs:
-  strategy:
-    fail-fast: false
-    matrix:
-      include:
-        - path: pr-summary
-        - path: pr-review
-
   # Use ESLint to check for linting errors
   lintCheck:
     runs-on: [ubuntu-latest]
     name: Linter (${{ matrix.path }})
+    strategy:
+      fail-fast: false
+      matrix:
+        path: [pr-summary, pr-review]
     steps:
       - name: Checkout source branch
         uses: actions/checkout@v4
@@ -38,6 +35,10 @@ jobs:
   formatCheck:
     runs-on: [ubuntu-latest]
     name: Formatter (${{ matrix.path }})
+    strategy:
+      fail-fast: false
+      matrix:
+        path: [pr-summary, pr-review]
     steps:
       - name: Checkout source branch
         uses: actions/checkout@v4
