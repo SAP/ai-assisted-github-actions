@@ -73,6 +73,8 @@ jobs:
         working-directory: source-folder
         run: |
           rm -rf ${{ github.workspace }}/release-folder/*
+          mkdir ${{ github.workspace }}/release-folder/pr-summary
+          mkdir ${{ github.workspace }}/release-folder/pr-review
       - name: Copy build output from source branch to release branch (PR Summary)
         working-directory: source-folder/pr-summary
         run: |
