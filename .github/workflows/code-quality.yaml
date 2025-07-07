@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: 18
           cache: npm
+          cache-dependency-path: pr-summary/package-lock.json
       - run: npm install --frozen-lockfile
         working-directory: pr-summary
       - name: Run ESLint
@@ -38,6 +39,7 @@ jobs:
         with:
           node-version: 18
           cache: npm
+          cache-dependency-path: pr-summary/package-lock.json
       - run: npm install --frozen-lockfile
         working-directory: pr-summary
       - name: Run Prettier
