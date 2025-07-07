@@ -22,6 +22,10 @@ jobs:
         with:
           ref: ${{ env.SOURCE_BRANCH }}
           path: source-folder
+      - name: Setup Git
+        run: |
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 
       - name: Setup Node (PR Summary)
         uses: actions/setup-node@v4
