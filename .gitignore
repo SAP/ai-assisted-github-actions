@@ -1,0 +1,42 @@
+# Dependency directory
+node_modules
+
+# Build directory
+dist
+
+# Rest pulled from https://github.com/github/gitignore/blob/master/Node.gitignore
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# dotenv environment variables file
+.env
+.env.test
+test-event.json
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea
+.vscode
+!.vscode/settings.json
+!.vscode/launch.json
+*.code-workspace
+
+# temporarily
+*.md
