@@ -27,16 +27,6 @@ export const ServiceKeyOrCredentials = z.union([
 ])
 export type ServiceKeyOrCredentials = z.infer<typeof ServiceKeyOrCredentials>
 
-export const ReferenceOrValue = z.union([
-  z.object({
-    path: z.string(),
-    owner: z.string().optional(),
-    repo: z.string().optional(),
-  }),
-  z.string(),
-])
-export type ReferenceOrValue = z.infer<typeof ReferenceOrValue>
-
 // ModelName
 export const ModelName: ZodType<ChatModel> = z.string()
 export type ModelName = z.infer<typeof ModelName>

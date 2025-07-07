@@ -2,7 +2,7 @@ import * as core from "@actions/core"
 import { readFileSync } from "node:fs"
 import { parse } from "yaml"
 import { z } from "zod"
-import { DeploymentConfig, ModelName, ModelParameters, ReferenceOrValue, ServiceKey, ServiceKeyOrCredentials } from "./zod-schema.js"
+import { DeploymentConfig, ModelName, ModelParameters, ServiceKey, ServiceKeyOrCredentials } from "./zod-schema.js"
 
 if (process.env.NODE_ENV === "development") {
   // evil hack to support core input names with hypens
@@ -145,7 +145,5 @@ export const config = {
 
   /** Defines where the summary will be posted. */
   displayMode: parseInput(z.enum(["comment", "comment-delta", "append", "none"]), "display-mode"),
-
-  testReference: parseInputAsJson(ReferenceOrValue, "test-reference"),
 }
 export type Config = typeof config

@@ -8,7 +8,6 @@ import { inspect } from "node:util"
 import parseDiff from "parse-diff"
 import * as aiCoreClient from "./ai-core-client.js"
 import { Config } from "./config.js"
-import { ReferenceOrValue } from "./zod-schema.js"
 
 /**
  * The main function for the action.
@@ -19,19 +18,6 @@ export async function run(config: Config): Promise<void> {
   const markerStart = "<!-- ai-assisted-summary-start -->"
   const markerEnd = "<!-- ai-assisted-summary-end -->"
 
-  const json: string = core.getInput("test-reference")
-
-  // const blub = ReferenceOrValue.parse(JSON.parse(json))
-
-  const blub = config.testReference
-
-  // if config.testReference is of type ReferenceOrValue, print the path, otherwise, print the value
-  if (blub && typeof blub === "object" && blub?.path) {
-    core.info(`Test reference path: ${blub.path}`)
-  } else {
-    core.info(`Test reference value: ${blub}`)
-  }
-
   core.startGroup("Create GitHub API & AI Core client")
   core.info(`Using the following configuration: ${inspect(config, { depth: undefined, colors: true })}`)
 
@@ -39,21 +25,6 @@ export async function run(config: Config): Promise<void> {
   const octokit = github.getOctokit(config.userToken, { baseUrl: config.githubApiUrl, throttle: throttlingOptions }, throttling, retry)
   const matchOptions: MinimatchOptions = { dot: true, nocase: true }
   const repoRef = { owner: config.owner, repo: config.repo }
-
-  const fileContentOrValue = async (value: string) => {
-    if (!value.includes(" \n"))
-      try {
-        const { data: content } = await octokit.rest.repos.getContent({ ...repoRef, path: value, mediaType: { format: "raw" } })
-        core.info(`Got content for ${value}: ${content}`)
-        return content
-      } catch (error) {
-        if (error instanceof Error) core.error(`Failed to get content for ${value}: ${error.message}`)
-      }
-    return value
-  }
-
-  //const blub = await fileContentOrValue("package.json")
-  //core.info(`File content or value: ${blub}`)
 
   core.info(`Get PR #${config.prNumber} from ${repoRef.owner}/${repoRef.repo}`)
   const { data: pullRequest } = await octokit.rest.pulls.get({ ...repoRef, pull_number: config.prNumber })
