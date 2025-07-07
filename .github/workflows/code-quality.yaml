@@ -1,0 +1,45 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch: ~
+
+jobs:
+  # Use ESLint to check for linting errors
+  lintCheck:
+    runs-on: [ubuntu-latest]
+    name: Linter
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm install --frozen-lockfile
+        working-directory: pr-summary
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: pr-summary
+
+  # Use Prettier to check for formatting errors
+  formatCheck:
+    runs-on: [ubuntu-latest]
+    name: Formatter
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+      - run: npm install --frozen-lockfile
+        working-directory: pr-summary
+      - name: Run Prettier
+        run: npm run prettier
+        working-directory: pr-summary
