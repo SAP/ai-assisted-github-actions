@@ -1,0 +1,111 @@
+name: "AI-assisted Pull-Request Summary"
+description: "Create a pull request summary with AI assistance"
+author: "Cross Projects | BTP Engineering & Experience | SAP Technology & Innovation"
+
+inputs:
+  aicore-service-key:
+    description: "The service key for your SAP AI Core service instance."
+    required: true
+
+  user-token:
+    description: "The personal access token of the GitHub user that is used to create the summary."
+    required: true
+    default: ${{ github.token }}
+
+  model:
+    description: "The name of the SAP AI Core model that is used to generate the summary."
+    required: true
+    default: "gpt-4"
+  model-parameters:
+    description: 'Additional parameters for the model as JSON. For example, {"temperature": 0.5, "max_tokens": 100}.'
+    default: "{}"
+  model-version:
+    description: "The version of the model that is used to generate the summary."
+    default: "latest"
+  deployment-config:
+    description: 'The deployment configuration as JSON. For example, {"resourceGroup": "abcdefg"}.'
+    default: "{}"
+  show-model-metadata-footer:
+    description: "Whether to show the model metadata (such as model name and token usage) in the footer of the summary."
+    default: true
+
+  prompt:
+    description: "The base prompt that is used to generate the summary."
+    required: true
+    default: |
+      You are a friendly assistant designed to create a code review and will act as an expert software engineer.
+      You will get output of a \`git diff\` command. You always answer in GitHub Markdown format.
+
+      Start with a high-level summary of the overall change instead of specific files within 80 words.
+      Do NOT use any title/heading for this summary.
+
+      Then, add the following content in GitHub Markdown format:
+
+      #### Walkthrough
+      Focus on the purpose and user impact, categorizing changes as "New Feature", "Bug Fix", "Documentation", "Refactor", "Style", "Test", "Chore", or "Revert".
+      Provide a bullet-point list, e.g., "- **New Feature:** Added search functionality to the UI".
+      Limit your response to 50-100 words and emphasize features visible to the end-user while omitting code-level details.
+  prompt-addition:
+    description: "The addition to the base prompt that is used to generate the summary."
+    required: false
+
+  include-files:
+    description: "A list of patterns that match the files of the PR that should be included in the summary (comma or newline separated and supports glob patterns)."
+    required: false
+    default: "**"
+  exclude-files:
+    description: "A list of patterns that match the files of the PR that should be excluded from the summary (comma or newline separated and supports glob patterns)."
+    required: false
+    default: ""
+  include-context-files:
+    description: "A list of patterns for files that should always be included as context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns)."
+    required: false
+    default: ""
+  exclude-context-files:
+    description: "A list of patterns for files that should be excluded from context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns)."
+    required: false
+    default: ""
+
+  display-mode:
+    description: "Defines where the summary will be posted (`comment`, `comment-delta`, `append`, or `none`)."
+    required: true
+    default: "comment"
+  header-text:
+    description: "Text to be inserted before the summary."
+    required: false
+  footer-text:
+    description: "Text to be inserted after the summary."
+    required: false
+  previous-results:
+    description: "Define what to do with previous results. Possible values are `keep`, `hide`, or `delete`."
+    required: true
+    default: "keep"
+
+  pr-number:
+    description: "The number of the pull request for which the summary should be created."
+    required: true
+    default: "${{ github.event.number }}"
+  base-sha:
+    description: "The hash of the commit representing the code before changes. Used as the starting point in comparison."
+  head-sha:
+    description: "The hash of the commit representing the code after changes. Used as the end point in comparison."
+  owner:
+    description: "The owner of the repository for which the summary should be created."
+    required: true
+    default: "${{ github.repository_owner }}"
+  repo:
+    description: "The name of the repository for which the summary should be created."
+    required: true
+    default: "${{ github.event.repository.name }}"
+  github-api-url:
+    description: "The GitHub base URL will be automatically set to the correct value from the GitHub context variable. If you want to override this, you can do so here (not recommended)."
+    required: true
+    default: "${{ github.api_url }}"
+
+outputs:
+  commentId:
+    description: "The ID of the created GitHub comment."
+
+runs:
+  using: node20
+  main: dist/index.js
