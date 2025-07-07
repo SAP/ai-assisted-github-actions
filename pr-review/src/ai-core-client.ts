@@ -1,5 +1,4 @@
 import * as core from "@actions/core"
-import { AzureOpenAiChatClient, AzureOpenAiChatCompletionRequestMessage, AzureOpenAiCompletionUsage } from "@sap-ai-sdk/foundation-models"
 import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orchestration"
 import axios from "axios"
 import { inspect } from "node:util"
@@ -29,25 +28,6 @@ export function getCompletionTokens(): number {
 export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
   process.env.AICORE_SERVICE_KEY = JSON.stringify(config.aicoreServiceKey)
   try {
-    core.info("For GPT models, try to call AzureOpenAiChatClient")
-    try {
-      const openAiChatClient = new AzureOpenAiChatClient(config.model)
-      const completion = await openAiChatClient.run({
-        messages: messages as AzureOpenAiChatCompletionRequestMessage[],
-      })
-      core.info(inspect(completion.data, { depth: undefined, colors: true }))
-
-      modelName = completion.data?.model ?? modelName
-      const tokenUsage: AzureOpenAiCompletionUsage = completion.getTokenUsage()!
-      promptTokens += tokenUsage.prompt_tokens
-      completionTokens += tokenUsage.completion_tokens
-
-      return completion.getContent()!
-    } catch (error) {
-      core.warning(getErrorMessage(error))
-      core.warning(error as Error)
-    }
-
     core.info("Use the OrchestrationClient to call the model")
     const orchestrationClient = new OrchestrationClient(
       {
@@ -84,67 +64,38 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
 export async function chatCompletionWithJsonSchema<T extends z.ZodTypeAny>(zodSchema: T, messages: ChatMessage[]): Promise<z.infer<T>> {
   process.env.AICORE_SERVICE_KEY = JSON.stringify(config.aicoreServiceKey)
   const jsonSchema = zodToJsonSchema(zodSchema)
-  let responseJson: string | undefined
 
-  if (config.model.includes("gpt")) {
-    core.info("For GPT models, try to call AzureOpenAiChatClient")
-    try {
-      const openAiChatClient = new AzureOpenAiChatClient(config.model)
-      const completion = await openAiChatClient.run({
-        messages: messages as AzureOpenAiChatCompletionRequestMessage[],
-        tools: [{ type: "function", function: { name: "createReview", parameters: jsonSchema } }],
-        tool_choice: { type: "function", function: { name: "createReview" } },
-      })
-      core.info(inspect(completion.data, { depth: undefined, colors: true }))
+  let responseJson
+  try {
+    core.info("Use the OrchestrationClient to call the model")
+    const orchestrationClient = new OrchestrationClient({
+      llm: {
+        model_name: config.model,
+        model_params: config.modelParameters,
+        model_version: config.modelVersion,
+      },
+      templating: {
+        template: [
+          ...messages,
+          {
+            role: "user",
+            content: `Always return a plain JSON document with the following schema:\n\n ${JSON.stringify(jsonSchema, undefined, 2)} `,
+          },
+        ],
+      },
+    })
+    const completion = await orchestrationClient.chatCompletion()
+    core.info(inspect(completion.rawResponse.data, { depth: undefined, colors: true }))
+    responseJson = `${completion.getContent()}`
 
-      modelName = completion.data?.model ?? modelName
-      const tokenUsage: AzureOpenAiCompletionUsage = completion.getTokenUsage()!
-      promptTokens += tokenUsage.prompt_tokens
-      completionTokens += tokenUsage.completion_tokens
-
-      const functionCall = completion.data.choices[0].message?.tool_calls?.[0]?.function
-      if (functionCall?.name !== "createReview") {
-        throw new Error("The model did not call the function")
-      }
-      responseJson = functionCall.arguments
-    } catch (error) {
-      core.warning(getErrorMessage(error))
-      core.warning(error as Error)
-    }
-  }
-
-  if (!responseJson) {
-    try {
-      core.info("Use the OrchestrationClient to call the model")
-      const orchestrationClient = new OrchestrationClient({
-        llm: {
-          model_name: config.model,
-          model_params: config.modelParameters,
-          model_version: config.modelVersion,
-        },
-        templating: {
-          template: [
-            ...messages,
-            {
-              role: "user",
-              content: `Always return a plain JSON document with the following schema:\n\n ${JSON.stringify(jsonSchema, undefined, 2)} `,
-            },
-          ],
-        },
-      })
-      const completion = await orchestrationClient.chatCompletion()
-      core.info(inspect(completion.rawResponse.data, { depth: undefined, colors: true }))
-      responseJson = `${completion.getContent()}`
-
-      modelName = (completion.data?.module_results?.llm?.model_name as string) ?? modelName
-      const tokenUsage: TokenUsage = completion.getTokenUsage()
-      promptTokens += tokenUsage.prompt_tokens
-      completionTokens += tokenUsage.completion_tokens
-    } catch (error) {
-      core.error(getErrorMessage(error))
-      core.error(error as Error)
-      throw error
-    }
+    modelName = (completion.data?.module_results?.llm?.model_name as string) ?? modelName
+    const tokenUsage: TokenUsage = completion.getTokenUsage()
+    promptTokens += tokenUsage.prompt_tokens
+    completionTokens += tokenUsage.completion_tokens
+  } catch (error) {
+    core.error(getErrorMessage(error))
+    core.error(error as Error)
+    throw error
   }
 
   core.startGroup("Parse the JSON document with the given schema")

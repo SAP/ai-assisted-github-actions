@@ -1,5 +1,4 @@
 import * as core from "@actions/core"
-import { AzureOpenAiChatClient, AzureOpenAiChatCompletionRequestMessage, AzureOpenAiCompletionUsage } from "@sap-ai-sdk/foundation-models"
 import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orchestration"
 import axios from "axios"
 import { inspect } from "node:util"
@@ -24,25 +23,6 @@ export function getCompletionTokens(): number {
 export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
   process.env.AICORE_SERVICE_KEY = JSON.stringify(config.aicoreServiceKey)
   try {
-    core.info("For GPT models, try to call AzureOpenAiChatClient")
-    try {
-      const openAiChatClient = new AzureOpenAiChatClient(config.model)
-      const completion = await openAiChatClient.run({
-        messages: messages as AzureOpenAiChatCompletionRequestMessage[],
-      })
-      core.info(inspect(completion.data, { depth: undefined, colors: true }))
-
-      modelName = completion.data?.model ?? modelName
-      const tokenUsage: AzureOpenAiCompletionUsage = completion.getTokenUsage()!
-      promptTokens += tokenUsage.prompt_tokens
-      completionTokens += tokenUsage.completion_tokens
-
-      return completion.getContent()!
-    } catch (error) {
-      core.warning(getErrorMessage(error))
-      core.warning(error as Error)
-    }
-
     core.info("Call OrchestrationClient")
     const orchestrationClient = new OrchestrationClient(
       {

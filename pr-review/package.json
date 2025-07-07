@@ -21,7 +21,6 @@
     "@octokit/plugin-throttling": "8.2.0",
     "@octokit/webhooks": "13.9.0",
     "@sap-ai-sdk/ai-api": "1.15.0",
-    "@sap-ai-sdk/foundation-models": "1.15.0",
     "@sap-ai-sdk/orchestration": "1.15.0",
     "axios": "1.10.0",
     "minimatch": "10.0.3",
