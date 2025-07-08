@@ -8,7 +8,7 @@ Please note that any predictions made by the AI should be taken as suggestions a
 ### How It Works
 
 1. The action captures the diff (added, removed, and modified content) of a pull request.
-2. This diff is sent to the _SAP AI Core_ service, which employs a generative AI model to create review comments.
+2. This diff is sent to the _SAP AI Core_ service, which employs a [generative AI model](https://help.sap.com/docs/sap-ai-core/sap-ai-core-service-guide/model-configuration) to create review comments.
 3. The review is then posted as a pull request review in GitHub.
 
 ## Requirements and Setup

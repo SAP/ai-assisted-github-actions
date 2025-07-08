@@ -13,11 +13,13 @@ Hey rudeGPT, review my Pull Request for “AI-assisted GitHub Actions”!
 The following GitHub Actions are available to assist with pull requests:
 
 - **[Pull Request Summary](pr-summary)**  
-  This action calls SAP AI Core to create a comment with a summary of the pull request.
+  This action calls SAP AI Core to create a comment with a summary of the pull request.  
+  Usage: `SAP/ai-assisted-github-actions/pr-summary@v3`
 - **[Pull Request Review](pr-review)**  
-  This action calls SAP AI Core to create a review of the pull request (as comment).
+  This action calls SAP AI Core to create a review of the pull request (as comment).  
+  Usage: `SAP/ai-assisted-github-actions/pr-review@v3`
 
-These actions access LLM models available via _SAP AI Core_.
+These actions access [models available via _SAP AI Core Orchestration_ service](https://help.sap.com/docs/sap-ai-core/sap-ai-core-service-guide/model-configuration).
 
 ## Requirements and Setup
 
