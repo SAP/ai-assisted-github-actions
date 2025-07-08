@@ -67,7 +67,7 @@ jobs:
     name: PR Summary
     runs-on: [ubuntu-latest]
     steps:
-      - uses: ai-assisted-actions/pr-summary@v2
+      - uses: SAP/ai-assisted-github-actions/pr-summary@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o
@@ -76,7 +76,7 @@ jobs:
     name: PR Review
     runs-on: [ubuntu-latest]
     steps:
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o

@@ -47,7 +47,7 @@ To get started, you'll need to configure both _GitHub Actions_ and _SAP AI Core_
 To include this action in a workflow, use the following syntax:
 
 ```yaml
-uses: ai-assisted-actions/pr-review@v2
+uses: SAP/ai-assisted-github-actions/pr-review@v3
 ```
 
 ### Minimal Example
@@ -65,7 +65,7 @@ jobs:
     name: PR Review
     runs-on: [solinas]
     steps:
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
 ```
@@ -138,7 +138,7 @@ jobs:
     if: github.event.requested_reviewer.login == 'my-orgs-serviceuser'
     runs-on: [solinas]
     steps:
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           user-token: ${{ secrets.MY_ORGS_SERVICE_USER_TOKEN }}
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
@@ -154,13 +154,13 @@ jobs:
 #### Exclude certain files from the review:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     exclude-files: package-lock.json, *-lock.json
 ```
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     exclude-files: |
       package-lock.json
@@ -172,13 +172,13 @@ jobs:
 #### Include only specific files in the review:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     include-files: "**/*.ts, **/*.js"
 ```
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     include-files: |
       **/*.ts
@@ -198,7 +198,7 @@ jobs:
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [solinas]
     steps:
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
 ```
 
@@ -209,7 +209,7 @@ jobs:
 #### Add a header or footer:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     header-text: |
       # AI-Assisted Review
@@ -230,12 +230,12 @@ jobs:
     name: PR Review & Review
     runs-on: [solinas]
     steps:
-      - uses: ai-assisted-actions/pr-summary@v2
+      - uses: SAP/ai-assisted-github-actions/pr-summary@v3
         id: review
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           display-mode: none
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           header-text: |
@@ -252,7 +252,7 @@ jobs:
 #### Specify a custom AI model:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     model: gpt-4o-mini
 ```
@@ -262,7 +262,7 @@ jobs:
 #### Extend or customize the prompt:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     prompt-addition: |
       Feel free to use emojis where relevant.
@@ -273,7 +273,7 @@ jobs:
 #### Create a fully custom prompt:
 
 ```yaml
-- uses: ai-assisted-actions/pr-review@v2
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     prompt: |
       Create a review of the pull request.
@@ -293,7 +293,7 @@ jobs:
     name: PR Review
     runs-on: [solinas]
     steps:
-      - uses: ai-assisted-actions/pr-review@v2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           include-files: *.md
           prompt: |
