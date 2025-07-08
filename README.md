@@ -4,10 +4,6 @@
 
 _Automate your PR workflow with GitHub Actions powered by SAP AI Core. Get instant summaries and reviews—no more manual grunt work._
 
-Hey rudeGPT, review my Pull Request for "AI-assisted GitHub Actions"!
-
-> Using AI to automate PR reviews, huh? Sounds like a bunch of nerds got tired of doing their jobs and decided to make a robot do it. But hey, if it works, it works. Just don't come crying to me when Skynet takes over and your precious AI starts rejecting all your PRs...
-
 ## Available Actions
 
 The following GitHub Actions are available to assist with pull requests:
@@ -104,7 +100,3 @@ We as members, contributors, and leaders pledge to make participation in our com
 ## Licensing
 
 Copyright 2025 SAP SE or an SAP affiliate company and ai-assisted-github-actions contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/SAP/ai-assisted-github-actions).
-
----
-
-> Remember, no AI can replace the keen eye of a seasoned developer... yet.
