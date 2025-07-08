@@ -95097,7 +95097,7 @@ class Z extends f {
     }, this.cacheClearInterval));
   }
 }
-const dist_z = 2147483647;
+const z = 2147483647;
 class ee extends g {
   constructor() {
     super(...arguments);
@@ -95184,7 +95184,7 @@ class te extends f {
       else if (this.queueBuffer.length < this.queueSize) {
         this.queueBuffer.push(n), this.emit("update-queue-buffer", e, this.queueBuffer);
         let u;
-        this.maxQueueWait <= dist_z && (u = setTimeout(() => {
+        this.maxQueueWait <= z && (u = setTimeout(() => {
           this.queueBuffer.splice(this.queueBuffer.indexOf(n), 1), this.emit("update-queue-buffer", e, this.queueBuffer), o.dispose(), m.dispose(), h(new T());
         }, this.maxQueueWait));
         const c = n.on("execute", () => {
@@ -95602,7 +95602,7 @@ const le = "0.1.1";
 const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
 // EXTERNAL MODULE: ./node_modules/yaml/dist/index.js
 var dist = __nccwpck_require__(38815);
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/helpers/util.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/helpers/util.js
 var util;
 (function (util) {
     util.assertEqual = (_) => { };
@@ -95737,7 +95737,7 @@ const getParsedType = (data) => {
     }
 };
 
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/ZodError.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/ZodError.js
 
 const ZodIssueCode = util.arrayToEnum([
     "invalid_type",
@@ -95853,8 +95853,9 @@ class ZodError extends Error {
         const formErrors = [];
         for (const sub of this.issues) {
             if (sub.path.length > 0) {
-                fieldErrors[sub.path[0]] = fieldErrors[sub.path[0]] || [];
-                fieldErrors[sub.path[0]].push(mapper(sub));
+                const firstEl = sub.path[0];
+                fieldErrors[firstEl] = fieldErrors[firstEl] || [];
+                fieldErrors[firstEl].push(mapper(sub));
             }
             else {
                 formErrors.push(mapper(sub));
@@ -95871,7 +95872,7 @@ ZodError.create = (issues) => {
     return error;
 };
 
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/locales/en.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/locales/en.js
 
 
 const errorMap = (issue, _ctx) => {
@@ -95941,6 +95942,8 @@ const errorMap = (issue, _ctx) => {
                 message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
             else if (issue.type === "number")
                 message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
+            else if (issue.type === "bigint")
+                message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
             else if (issue.type === "date")
                 message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
             else
@@ -95980,7 +95983,7 @@ const errorMap = (issue, _ctx) => {
 };
 /* harmony default export */ const en = (errorMap);
 
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/errors.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/errors.js
 
 let overrideErrorMap = en;
 
@@ -95991,7 +95994,15 @@ function getErrorMap() {
     return overrideErrorMap;
 }
 
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/helpers/parseUtil.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/helpers/errorUtil.js
+var errorUtil;
+(function (errorUtil) {
+    errorUtil.errToObj = (message) => typeof message === "string" ? { message } : message || {};
+    // biome-ignore lint:
+    errorUtil.toString = (message) => typeof message === "string" ? message : message?.message;
+})(errorUtil || (errorUtil = {}));
+
+;// CONCATENATED MODULE: ./node_modules/zod/v3/helpers/parseUtil.js
 
 
 const makeIssue = (params) => {
@@ -96022,7 +96033,7 @@ const makeIssue = (params) => {
         message: errorMessage,
     };
 };
-const EMPTY_PATH = [];
+const EMPTY_PATH = (/* unused pure expression or super */ null && ([]));
 function addIssueToContext(ctx, issueData) {
     const overrideMap = getErrorMap();
     const issue = makeIssue({
@@ -96054,7 +96065,7 @@ class ParseStatus {
         const arrayValue = [];
         for (const s of results) {
             if (s.status === "aborted")
-                return INVALID;
+                return parseUtil_INVALID;
             if (s.status === "dirty")
                 status.dirty();
             arrayValue.push(s.value);
@@ -96078,9 +96089,9 @@ class ParseStatus {
         for (const pair of pairs) {
             const { key, value } = pair;
             if (key.status === "aborted")
-                return INVALID;
+                return parseUtil_INVALID;
             if (value.status === "aborted")
-                return INVALID;
+                return parseUtil_INVALID;
             if (key.status === "dirty")
                 status.dirty();
             if (value.status === "dirty")
@@ -96092,7 +96103,7 @@ class ParseStatus {
         return { status: status.value, value: finalObject };
     }
 }
-const INVALID = Object.freeze({
+const parseUtil_INVALID = Object.freeze({
     status: "aborted",
 });
 const DIRTY = (value) => ({ status: "dirty", value });
@@ -96102,15 +96113,7 @@ const isDirty = (x) => x.status === "dirty";
 const isValid = (x) => x.status === "valid";
 const isAsync = (x) => typeof Promise !== "undefined" && x instanceof Promise;
 
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/helpers/errorUtil.js
-var errorUtil;
-(function (errorUtil) {
-    errorUtil.errToObj = (message) => typeof message === "string" ? { message } : message || {};
-    // biome-ignore lint:
-    errorUtil.toString = (message) => typeof message === "string" ? message : message?.message;
-})(errorUtil || (errorUtil = {}));
-
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/types.js
+;// CONCATENATED MODULE: ./node_modules/zod/v3/types.js
 
 
 
@@ -96556,6 +96559,8 @@ function isValidJWT(jwt, alg) {
         return false;
     try {
         const [header] = jwt.split(".");
+        if (!header)
+            return false;
         // Convert base64url to base64
         const base64 = header
             .replace(/-/g, "+")
@@ -96598,7 +96603,7 @@ class ZodString extends ZodType {
                 expected: ZodParsedType.string,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -97190,7 +97195,7 @@ class ZodNumber extends ZodType {
                 expected: ZodParsedType.number,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         let ctx = undefined;
         const status = new ParseStatus();
@@ -97484,7 +97489,7 @@ class ZodBigInt extends ZodType {
             expected: ZodParsedType.bigint,
             received: ctx.parsedType,
         });
-        return INVALID;
+        return parseUtil_INVALID;
     }
     gte(value, message) {
         return this.setLimit("min", value, true, errorUtil.toString(message));
@@ -97599,7 +97604,7 @@ class ZodBoolean extends ZodType {
                 expected: ZodParsedType.boolean,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -97624,14 +97629,14 @@ class ZodDate extends ZodType {
                 expected: ZodParsedType.date,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (Number.isNaN(input.data.getTime())) {
             const ctx = this._getOrReturnCtx(input);
             addIssueToContext(ctx, {
                 code: ZodIssueCode.invalid_date,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const status = new ParseStatus();
         let ctx = undefined;
@@ -97732,7 +97737,7 @@ class ZodSymbol extends ZodType {
                 expected: ZodParsedType.symbol,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -97753,7 +97758,7 @@ class ZodUndefined extends ZodType {
                 expected: ZodParsedType.undefined,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -97774,7 +97779,7 @@ class ZodNull extends ZodType {
                 expected: ZodParsedType.null,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -97825,7 +97830,7 @@ class ZodNever extends ZodType {
             expected: ZodParsedType.never,
             received: ctx.parsedType,
         });
-        return INVALID;
+        return parseUtil_INVALID;
     }
 }
 ZodNever.create = (params) => {
@@ -97844,7 +97849,7 @@ class ZodVoid extends ZodType {
                 expected: ZodParsedType.void,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -97865,7 +97870,7 @@ class ZodArray extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (def.exactLength !== null) {
             const tooBig = ctx.data.length > def.exactLength.value;
@@ -98051,7 +98056,7 @@ class ZodObject extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const { status, ctx } = this._processInputParams(input);
         const { shape, keys: shapeKeys } = this._getCached();
@@ -98399,7 +98404,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (ctx.common.async) {
             return Promise.all(options.map(async (option) => {
@@ -98457,7 +98462,7 @@ class ZodUnion extends ZodType {
                 code: ZodIssueCode.invalid_union,
                 unionErrors,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
     }
     get options() {
@@ -98532,7 +98537,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const discriminator = this.discriminator;
         const discriminatorValue = ctx.data[discriminator];
@@ -98543,7 +98548,7 @@ class ZodDiscriminatedUnion extends ZodType {
                 options: Array.from(this.optionsMap.keys()),
                 path: [discriminator],
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (ctx.common.async) {
             return option._parseAsync({
@@ -98649,14 +98654,14 @@ class ZodIntersection extends ZodType {
         const { status, ctx } = this._processInputParams(input);
         const handleParsed = (parsedLeft, parsedRight) => {
             if (isAborted(parsedLeft) || isAborted(parsedRight)) {
-                return INVALID;
+                return parseUtil_INVALID;
             }
             const merged = mergeValues(parsedLeft.value, parsedRight.value);
             if (!merged.valid) {
                 addIssueToContext(ctx, {
                     code: ZodIssueCode.invalid_intersection_types,
                 });
-                return INVALID;
+                return parseUtil_INVALID;
             }
             if (isDirty(parsedLeft) || isDirty(parsedRight)) {
                 status.dirty();
@@ -98708,7 +98713,7 @@ class ZodTuple extends ZodType {
                 expected: ZodParsedType.array,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (ctx.data.length < this._def.items.length) {
             addIssueToContext(ctx, {
@@ -98718,7 +98723,7 @@ class ZodTuple extends ZodType {
                 exact: false,
                 type: "array",
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const rest = this._def.rest;
         if (!rest && ctx.data.length > this._def.items.length) {
@@ -98784,7 +98789,7 @@ class ZodRecord extends ZodType {
                 expected: ZodParsedType.object,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const pairs = [];
         const keyType = this._def.keyType;
@@ -98838,7 +98843,7 @@ class ZodMap extends ZodType {
                 expected: ZodParsedType.map,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const keyType = this._def.keyType;
         const valueType = this._def.valueType;
@@ -98855,7 +98860,7 @@ class ZodMap extends ZodType {
                     const key = await pair.key;
                     const value = await pair.value;
                     if (key.status === "aborted" || value.status === "aborted") {
-                        return INVALID;
+                        return parseUtil_INVALID;
                     }
                     if (key.status === "dirty" || value.status === "dirty") {
                         status.dirty();
@@ -98871,7 +98876,7 @@ class ZodMap extends ZodType {
                 const key = pair.key;
                 const value = pair.value;
                 if (key.status === "aborted" || value.status === "aborted") {
-                    return INVALID;
+                    return parseUtil_INVALID;
                 }
                 if (key.status === "dirty" || value.status === "dirty") {
                     status.dirty();
@@ -98899,7 +98904,7 @@ class ZodSet extends ZodType {
                 expected: ZodParsedType.set,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const def = this._def;
         if (def.minSize !== null) {
@@ -98933,7 +98938,7 @@ class ZodSet extends ZodType {
             const parsedSet = new Set();
             for (const element of elements) {
                 if (element.status === "aborted")
-                    return INVALID;
+                    return parseUtil_INVALID;
                 if (element.status === "dirty")
                     status.dirty();
                 parsedSet.add(element.value);
@@ -98989,7 +98994,7 @@ class ZodFunction extends ZodType {
                 expected: ZodParsedType.function,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         function makeArgsIssue(args, error) {
             return makeIssue({
@@ -99116,7 +99121,7 @@ class ZodLiteral extends ZodType {
                 code: ZodIssueCode.invalid_literal,
                 expected: this._def.value,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -99148,7 +99153,7 @@ class ZodEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(this._def.values);
@@ -99161,7 +99166,7 @@ class ZodEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -99214,7 +99219,7 @@ class ZodNativeEnum extends ZodType {
                 received: ctx.parsedType,
                 code: ZodIssueCode.invalid_type,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         if (!this._cache) {
             this._cache = new Set(util.getValidEnumValues(this._def.values));
@@ -99226,7 +99231,7 @@ class ZodNativeEnum extends ZodType {
                 code: ZodIssueCode.invalid_enum_value,
                 options: expectedValues,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return OK(input.data);
     }
@@ -99253,7 +99258,7 @@ class ZodPromise extends ZodType {
                 expected: ZodParsedType.promise,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         const promisified = ctx.parsedType === ZodParsedType.promise ? ctx.data : Promise.resolve(ctx.data);
         return OK(promisified.then((data) => {
@@ -99303,14 +99308,14 @@ class ZodEffects extends ZodType {
             if (ctx.common.async) {
                 return Promise.resolve(processed).then(async (processed) => {
                     if (status.value === "aborted")
-                        return INVALID;
+                        return parseUtil_INVALID;
                     const result = await this._def.schema._parseAsync({
                         data: processed,
                         path: ctx.path,
                         parent: ctx,
                     });
                     if (result.status === "aborted")
-                        return INVALID;
+                        return parseUtil_INVALID;
                     if (result.status === "dirty")
                         return DIRTY(result.value);
                     if (status.value === "dirty")
@@ -99320,14 +99325,14 @@ class ZodEffects extends ZodType {
             }
             else {
                 if (status.value === "aborted")
-                    return INVALID;
+                    return parseUtil_INVALID;
                 const result = this._def.schema._parseSync({
                     data: processed,
                     path: ctx.path,
                     parent: ctx,
                 });
                 if (result.status === "aborted")
-                    return INVALID;
+                    return parseUtil_INVALID;
                 if (result.status === "dirty")
                     return DIRTY(result.value);
                 if (status.value === "dirty")
@@ -99353,7 +99358,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (inner.status === "aborted")
-                    return INVALID;
+                    return parseUtil_INVALID;
                 if (inner.status === "dirty")
                     status.dirty();
                 // return value is ignored
@@ -99363,7 +99368,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
                     if (inner.status === "aborted")
-                        return INVALID;
+                        return parseUtil_INVALID;
                     if (inner.status === "dirty")
                         status.dirty();
                     return executeRefinement(inner.value).then(() => {
@@ -99380,7 +99385,7 @@ class ZodEffects extends ZodType {
                     parent: ctx,
                 });
                 if (!isValid(base))
-                    return INVALID;
+                    return parseUtil_INVALID;
                 const result = effect.transform(base.value, checkCtx);
                 if (result instanceof Promise) {
                     throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
@@ -99390,7 +99395,7 @@ class ZodEffects extends ZodType {
             else {
                 return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
                     if (!isValid(base))
-                        return INVALID;
+                        return parseUtil_INVALID;
                     return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
                         status: status.value,
                         value: result,
@@ -99550,7 +99555,7 @@ class ZodNaN extends ZodType {
                 expected: ZodParsedType.nan,
                 received: ctx.parsedType,
             });
-            return INVALID;
+            return parseUtil_INVALID;
         }
         return { status: "valid", value: input.data };
     }
@@ -99587,7 +99592,7 @@ class ZodPipeline extends ZodType {
                     parent: ctx,
                 });
                 if (inResult.status === "aborted")
-                    return INVALID;
+                    return parseUtil_INVALID;
                 if (inResult.status === "dirty") {
                     status.dirty();
                     return DIRTY(inResult.value);
@@ -99609,7 +99614,7 @@ class ZodPipeline extends ZodType {
                 parent: ctx,
             });
             if (inResult.status === "aborted")
-                return INVALID;
+                return parseUtil_INVALID;
             if (inResult.status === "dirty") {
                 status.dirty();
                 return {
@@ -99801,26 +99806,7 @@ const coerce = {
     date: ((arg) => ZodDate.create({ ...arg, coerce: true })),
 };
 
-const NEVER = INVALID;
-
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/external.js
-
-
-
-
-
-
-
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/v3/index.js
-
-
-
-/* harmony default export */ const v3 = ((/* unused pure expression or super */ null && (z)));
-
-;// CONCATENATED MODULE: ./node_modules/zod/dist/esm/index.js
-
-
-/* harmony default export */ const esm = ((/* unused pure expression or super */ null && (z3)));
+const NEVER = (/* unused pure expression or super */ null && (INVALID));
 
 ;// CONCATENATED MODULE: ./src/zod-schema.ts
 
