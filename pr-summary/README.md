@@ -1,4 +1,4 @@
-# AI-Assisted GitHub Actions for Pull-Request Summaries
+# AI-assisted GitHub Actions for Pull-Request Summaries
 
 _Boost your workflow with AI-generated, concise pull request summaries. Save time and enhance team collaboration directly within GitHub._
 

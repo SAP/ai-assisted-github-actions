@@ -1,4 +1,4 @@
-# AI-Assisted GitHub Actions for Pull-Request Reviews
+# AI-assisted GitHub Actions for Pull-Request Reviews
 
 _Elevate your GitHub workflow with AI-driven, concise pull request reviews. Save time, improve code quality, and enhance team collaboration effortlessly._
 
