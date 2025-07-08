@@ -37,6 +37,3 @@ Thumbs.db
 !.vscode/settings.json
 !.vscode/launch.json
 *.code-workspace
-
-# temporarily
-*.md
