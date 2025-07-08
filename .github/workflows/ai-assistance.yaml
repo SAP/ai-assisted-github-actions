@@ -9,7 +9,7 @@ jobs:
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-summary@8b4e4ef555450551045d43896ef25396ed387c4a # v3
+      - uses: SAP/ai-assisted-github-actions/pr-summary@e30d0a9b55431531b1c92a58dc96b6ab21791fed # v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o
@@ -22,7 +22,7 @@ jobs:
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-review@8b4e4ef555450551045d43896ef25396ed387c4a # v3
+      - uses: SAP/ai-assisted-github-actions/pr-review@e30d0a9b55431531b1c92a58dc96b6ab21791fed # v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o
