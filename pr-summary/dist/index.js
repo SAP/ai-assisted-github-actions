@@ -102010,12 +102010,12 @@ var external_node_util_ = __nccwpck_require__(57975);
 // EXTERNAL MODULE: ./node_modules/parse-diff/index.js
 var parse_diff = __nccwpck_require__(82673);
 var parse_diff_default = /*#__PURE__*/__nccwpck_require__.n(parse_diff);
+// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/util/dist/index.js
+var util_dist = __nccwpck_require__(9471);
 // EXTERNAL MODULE: external "node:stream"
 var external_node_stream_ = __nccwpck_require__(57075);
 ;// CONCATENATED MODULE: external "node:stream/consumers"
 const consumers_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/consumers");
-// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/util/dist/index.js
-var util_dist = __nccwpck_require__(9471);
 // EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/http-client/dist/index.js
 var http_client_dist = __nccwpck_require__(36063);
 // EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/dist/index.js
@@ -102538,6 +102538,60 @@ function _decodeChunks(chunks) {
 
 
 //# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream-chunk-response.js
+/**
+ * Orchestration stream chunk response.
+ */
+class OrchestrationStreamChunkResponse {
+    data;
+    constructor(data) {
+        this.data = data;
+        this.data = data;
+    }
+    /**
+     * Usage of tokens in the chunk response.
+     * @returns Token usage.
+     */
+    getTokenUsage() {
+        return this.data.orchestration_result?.usage;
+    }
+    /**
+     * Reason for stopping the completion stream chunk.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The finish reason.
+     */
+    getFinishReason(choiceIndex = 0) {
+        return this.findChoiceByIndex(choiceIndex)?.finish_reason;
+    }
+    /**
+     * Gets the delta tool calls for a specific choice index.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The delta tool calls for the specified choice index.
+     */
+    getDeltaToolCalls(choiceIndex = 0) {
+        return this.findChoiceByIndex(choiceIndex)?.delta.tool_calls;
+    }
+    /**
+     * Parses the chunk response and returns the delta content.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The message delta content.
+     */
+    getDeltaContent(choiceIndex = 0) {
+        return this.findChoiceByIndex(choiceIndex)?.delta.content;
+    }
+    /**
+     * Parses the chunk response and returns the choice by index.
+     * @param index - The index of the choice to find.
+     * @returns An {@link LLMChoiceStreaming} object associated withe index.
+     */
+    findChoiceByIndex(index) {
+        return this.getChoices()?.find((c) => c.index === index);
+    }
+    getChoices() {
+        return this.data.orchestration_result?.choices;
+    }
+}
+//# sourceMappingURL=orchestration-stream-chunk-response.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/artifact-api.js
 /*
  * Copyright (c) 2025 SAP SE or an SAP affiliate company. All rights reserved.
@@ -104371,216 +104425,86 @@ const promptTemplatePostRequestSchema = objectType({
 // eslint-disable-next-line import/no-internal-modules
 
 //# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream-chunk-response.js
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream-response.js
 /**
- * Orchestration stream chunk response.
+ * Orchestration stream response.
  */
-class OrchestrationStreamChunkResponse {
-    data;
-    constructor(data) {
-        this.data = data;
-        this.data = data;
-    }
+class OrchestrationStreamResponse {
+    _usage;
     /**
-     * Usage of tokens in the chunk response.
-     * @returns Token usage.
+     * Finish reasons for all choices.
+     */
+    _finishReasons = new Map();
+    _toolCallsAccumulators = new Map();
+    _stream;
+    _toolCalls = new Map();
+    /**
+     * Gets the token usage for the response.
+     * @returns The token usage for the response.
      */
     getTokenUsage() {
-        return this.data.orchestration_result?.usage;
+        return this._usage;
     }
     /**
-     * Reason for stopping the completion stream chunk.
-     * @param choiceIndex - The index of the choice to parse.
-     * @returns The finish reason.
+     * @internal
+     */
+    _setTokenUsage(usage) {
+        this._usage = usage;
+    }
+    /**
+     * Gets the finish reason for a specific choice index.
+     * @param choiceIndex - The index of the choice to get the finish reason for.
+     * @returns The finish reason for the specified choice index.
      */
     getFinishReason(choiceIndex = 0) {
-        return this.findChoiceByIndex(choiceIndex)?.finish_reason;
+        return this._finishReasons.get(choiceIndex);
     }
     /**
-     * Gets the delta tool calls for a specific choice index.
-     * @param choiceIndex - The index of the choice to parse.
-     * @returns The delta tool calls for the specified choice index.
+     * @internal
      */
-    getDeltaToolCalls(choiceIndex = 0) {
-        return this.findChoiceByIndex(choiceIndex)?.delta.tool_calls;
+    _getFinishReasons() {
+        return this._finishReasons;
     }
     /**
-     * Parses the chunk response and returns the delta content.
-     * @param choiceIndex - The index of the choice to parse.
-     * @returns The message delta content.
+     * @internal
      */
-    getDeltaContent(choiceIndex = 0) {
-        return this.findChoiceByIndex(choiceIndex)?.delta.content;
+    _setFinishReasons(finishReasons) {
+        this._finishReasons = finishReasons;
     }
     /**
-     * Parses the chunk response and returns the choice by index.
-     * @param index - The index of the choice to find.
-     * @returns An {@link LLMChoiceStreaming} object associated withe index.
+     * Gets the tool calls for a specific choice index.
+     * @param choiceIndex - The index of the choice to get the tool calls for.
+     * @returns The tool calls for the specified choice index.
      */
-    findChoiceByIndex(index) {
-        return this.getChoices()?.find((c) => c.index === index);
+    getToolCalls(choiceIndex = 0) {
+        return this._toolCalls.get(choiceIndex);
     }
-    getChoices() {
-        return this.data.orchestration_result?.choices;
+    /**
+     * @internal
+     */
+    _setToolCalls(choiceIndex, toolCalls) {
+        this._toolCalls.set(choiceIndex, toolCalls);
+    }
+    /**
+     * @internal
+     */
+    _getToolCallsAccumulators() {
+        return this._toolCallsAccumulators;
+    }
+    get stream() {
+        if (!this._stream) {
+            throw new Error('Response stream is undefined.');
+        }
+        return this._stream;
+    }
+    /**
+     * @internal
+     */
+    set stream(stream) {
+        this._stream = stream;
     }
 }
-//# sourceMappingURL=orchestration-stream-chunk-response.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream.js
-
-
-
-
-const orchestration_stream_logger = (0,util_dist.createLogger)({
-    package: 'orchestration',
-    messageContext: 'orchestration-chat-completion-stream'
-});
-/**
- * Orchestration stream containing post-processing functions.
- */
-class OrchestrationStream extends SseStream {
-    iterator;
-    /**
-     * Create an orchestration stream based on the http response.
-     * @param response - Http response.
-     * @returns An orchestration stream.
-     * @internal
-     */
-    static _create(response, controller) {
-        const stream = SseStream.transformToSseStream(response, controller);
-        return new OrchestrationStream(stream.iterator, controller);
-    }
-    /**
-     * Wrap raw chunk data with chunk response class to provide helper functions.
-     * @param stream - Orchestration stream.
-     * @internal
-     */
-    static async *_processChunk(stream) {
-        for await (const chunk of stream) {
-            yield new OrchestrationStreamChunkResponse(chunk);
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processToolCalls(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process tool calls.');
-        }
-        for await (const chunk of stream) {
-            chunk.data.orchestration_result?.choices.forEach(choice => {
-                const choiceIndex = choice.index;
-                const toolCallsChunks = chunk.getDeltaToolCalls(choiceIndex);
-                if (toolCallsChunks) {
-                    let toolCallAccumulators = response
-                        ._getToolCallsAccumulators()
-                        .get(choiceIndex);
-                    if (!toolCallAccumulators) {
-                        toolCallAccumulators = new Map();
-                        response
-                            ._getToolCallsAccumulators()
-                            .set(choiceIndex, toolCallAccumulators);
-                    }
-                    toolCallsChunks.map(toolCallChunk => {
-                        const toolCallId = toolCallChunk.index;
-                        const toolCallAccumulator = mergeToolCallChunk(toolCallChunk, toolCallAccumulators.get(toolCallId));
-                        toolCallAccumulators.set(toolCallId, toolCallAccumulator);
-                    });
-                }
-            });
-            yield chunk;
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processFinishReason(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process finish reasons.');
-        }
-        for await (const chunk of stream) {
-            chunk.data.orchestration_result?.choices.forEach(choice => {
-                const choiceIndex = choice.index;
-                const finishReason = chunk.getFinishReason(choiceIndex);
-                if (finishReason) {
-                    response._getFinishReasons().set(choiceIndex, finishReason);
-                    switch (finishReason) {
-                        case 'content_filter':
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with content filter hit.`);
-                            break;
-                        case 'length':
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with token length exceeded.`);
-                            break;
-                        case 'stop':
-                        case 'tool_calls':
-                        case 'function_call':
-                            orchestration_stream_logger.debug(`Choice ${choiceIndex}: Stream finished.`);
-                            break;
-                        default:
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with unknown reason '${finishReason}'.`);
-                    }
-                }
-            });
-            yield chunk;
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processTokenUsage(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process token usage.');
-        }
-        for await (const chunk of stream) {
-            const usage = chunk.getTokenUsage();
-            if (usage) {
-                response._setTokenUsage(usage);
-                orchestration_stream_logger.debug(`Token usage: ${JSON.stringify(usage)}`);
-            }
-            yield chunk;
-        }
-    }
-    /**
-     * Transform a stream of chunks into a stream of content strings.
-     * @param stream - Orchestration stream.
-     * @param choiceIndex - The index of the choice to parse.
-     * @internal
-     */
-    static async *_processContentStream(stream) {
-        for await (const chunk of stream) {
-            const deltaContent = chunk.getDeltaContent();
-            if (!deltaContent) {
-                continue;
-            }
-            yield deltaContent;
-        }
-    }
-    constructor(iterator, controller) {
-        super(iterator, controller);
-        this.iterator = iterator;
-    }
-    /**
-     * Pipe the stream through a processing function.
-     * @param processFn - The function to process the input stream.
-     * @param response - The `OrchestrationStreamResponse` object for process function to store finish reason, token usage, etc.
-     * @returns The output stream containing processed items.
-     * @internal
-     */
-    _pipe(processFn, response) {
-        if (response) {
-            return new OrchestrationStream(() => processFn(this, response), this.controller);
-        }
-        return new OrchestrationStream(() => processFn(this), this.controller);
-    }
-    /**
-     * Transform the stream of chunks into a stream of content strings.
-     * @param this - Orchestration stream.
-     * @returns A stream of content strings.
-     */
-    toContentStream() {
-        return new OrchestrationStream(() => OrchestrationStream._processContentStream(this), this.controller);
-    }
-}
-//# sourceMappingURL=orchestration-stream.js.map
+//# sourceMappingURL=orchestration-stream-response.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-response.js
 /**
  * Representation of an orchestration response.
@@ -105094,98 +105018,174 @@ class OrchestrationClient {
 
 
 //# sourceMappingURL=internal.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream-response.js
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream.js
 
+
+
+
+const orchestration_stream_logger = (0,util_dist.createLogger)({
+    package: 'orchestration',
+    messageContext: 'orchestration-chat-completion-stream'
+});
 /**
- * Orchestration stream response.
+ * Orchestration stream containing post-processing functions.
  */
-class OrchestrationStreamResponse {
-    _usage;
+class OrchestrationStream extends SseStream {
+    iterator;
     /**
-     * Finish reasons for all choices.
+     * Create an orchestration stream based on the http response.
+     * @param response - Http response.
+     * @returns An orchestration stream.
+     * @internal
      */
-    _finishReasons = new Map();
-    _toolCallsAccumulators = new Map();
-    _stream;
+    static _create(response, controller) {
+        const stream = SseStream.transformToSseStream(response, controller);
+        return new OrchestrationStream(stream.iterator, controller);
+    }
     /**
-     * Gets the token usage for the response.
-     * @returns The token usage for the response.
+     * Wrap raw chunk data with chunk response class to provide helper functions.
+     * @param stream - Orchestration stream.
+     * @internal
      */
-    getTokenUsage() {
-        return this._usage;
+    static async *_processChunk(stream) {
+        for await (const chunk of stream) {
+            yield new OrchestrationStreamChunkResponse(chunk);
+        }
     }
     /**
      * @internal
      */
-    _setTokenUsage(usage) {
-        this._usage = usage;
-    }
-    /**
-     * Gets the finish reason for a specific choice index.
-     * @param choiceIndex - The index of the choice to get the finish reason for.
-     * @returns The finish reason for the specified choice index.
-     */
-    getFinishReason(choiceIndex = 0) {
-        return this._finishReasons.get(choiceIndex);
-    }
-    /**
-     * @internal
-     */
-    _getFinishReasons() {
-        return this._finishReasons;
-    }
-    /**
-     * @internal
-     */
-    _setFinishReasons(finishReasons) {
-        this._finishReasons = finishReasons;
-    }
-    /**
-     * Gets the tool calls for a specific choice index.
-     * @param choiceIndex - The index of the choice to get the tool calls for.
-     * @returns The tool calls for the specified choice index.
-     */
-    getToolCalls(choiceIndex = 0) {
-        try {
-            const toolCallsAccumulators = this._toolCallsAccumulators.get(choiceIndex);
-            if (!toolCallsAccumulators) {
-                return undefined;
-            }
+    static async *_processToolCalls(stream, response) {
+        if (!response) {
+            throw new Error('Response is required to process tool calls.');
+        }
+        for await (const chunk of stream) {
+            chunk.data.orchestration_result?.choices.forEach(choice => {
+                const choiceIndex = choice.index;
+                const toolCallsChunks = chunk.getDeltaToolCalls(choiceIndex);
+                if (toolCallsChunks) {
+                    let toolCallAccumulators = response
+                        ._getToolCallsAccumulators()
+                        .get(choiceIndex);
+                    if (!toolCallAccumulators) {
+                        toolCallAccumulators = new Map();
+                        response
+                            ._getToolCallsAccumulators()
+                            .set(choiceIndex, toolCallAccumulators);
+                    }
+                    toolCallsChunks.map(toolCallChunk => {
+                        const toolCallId = toolCallChunk.index;
+                        const toolCallAccumulator = mergeToolCallChunk(toolCallChunk, toolCallAccumulators.get(toolCallId));
+                        toolCallAccumulators.set(toolCallId, toolCallAccumulator);
+                    });
+                }
+            });
+            yield chunk;
+        }
+        for (const [choiceIndex, toolCallsAccumulators] of response._getToolCallsAccumulators()) {
             const toolCalls = [];
             for (const [id, acc] of toolCallsAccumulators.entries()) {
                 if (isMessageToolCall(acc)) {
                     toolCalls.push(acc);
                 }
                 else {
-                    throw new Error(`Tool call with id ${id} was incomplete.`);
+                    orchestration_stream_logger.error(`Error while parsing tool calls for choice index ${choiceIndex}: Tool call with id ${id} was incomplete.`);
                 }
             }
-            return toolCalls;
-        }
-        catch (error) {
-            throw new Error(`Error while getting tool calls for choice index ${choiceIndex}: ${error}`);
+            response._setToolCalls(choiceIndex, toolCalls);
         }
     }
     /**
      * @internal
      */
-    _getToolCallsAccumulators() {
-        return this._toolCallsAccumulators;
-    }
-    get stream() {
-        if (!this._stream) {
-            throw new Error('Response stream is undefined.');
+    static async *_processFinishReason(stream, response) {
+        if (!response) {
+            throw new Error('Response is required to process finish reasons.');
         }
-        return this._stream;
+        for await (const chunk of stream) {
+            chunk.data.orchestration_result?.choices.forEach(choice => {
+                const choiceIndex = choice.index;
+                const finishReason = chunk.getFinishReason(choiceIndex);
+                if (finishReason) {
+                    response._getFinishReasons().set(choiceIndex, finishReason);
+                    switch (finishReason) {
+                        case 'content_filter':
+                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with content filter hit.`);
+                            break;
+                        case 'length':
+                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with token length exceeded.`);
+                            break;
+                        case 'stop':
+                        case 'tool_calls':
+                        case 'function_call':
+                            orchestration_stream_logger.debug(`Choice ${choiceIndex}: Stream finished.`);
+                            break;
+                        default:
+                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with unknown reason '${finishReason}'.`);
+                    }
+                }
+            });
+            yield chunk;
+        }
     }
     /**
      * @internal
      */
-    set stream(stream) {
-        this._stream = stream;
+    static async *_processTokenUsage(stream, response) {
+        if (!response) {
+            throw new Error('Response is required to process token usage.');
+        }
+        for await (const chunk of stream) {
+            const usage = chunk.getTokenUsage();
+            if (usage) {
+                response._setTokenUsage(usage);
+                orchestration_stream_logger.debug(`Token usage: ${JSON.stringify(usage)}`);
+            }
+            yield chunk;
+        }
+    }
+    /**
+     * Transform a stream of chunks into a stream of content strings.
+     * @param stream - Orchestration stream.
+     * @param choiceIndex - The index of the choice to parse.
+     * @internal
+     */
+    static async *_processContentStream(stream) {
+        for await (const chunk of stream) {
+            const deltaContent = chunk.getDeltaContent();
+            if (!deltaContent) {
+                continue;
+            }
+            yield deltaContent;
+        }
+    }
+    constructor(iterator, controller) {
+        super(iterator, controller);
+        this.iterator = iterator;
+    }
+    /**
+     * Pipe the stream through a processing function.
+     * @param processFn - The function to process the input stream.
+     * @param response - The `OrchestrationStreamResponse` object for process function to store finish reason, token usage, etc.
+     * @returns The output stream containing processed items.
+     * @internal
+     */
+    _pipe(processFn, response) {
+        if (response) {
+            return new OrchestrationStream(() => processFn(this, response), this.controller);
+        }
+        return new OrchestrationStream(() => processFn(this), this.controller);
+    }
+    /**
+     * Transform the stream of chunks into a stream of content strings.
+     * @param this - Orchestration stream.
+     * @returns A stream of content strings.
+     */
+    toContentStream() {
+        return new OrchestrationStream(() => OrchestrationStream._processContentStream(this), this.controller);
     }
 }
-//# sourceMappingURL=orchestration-stream-response.js.map
+//# sourceMappingURL=orchestration-stream.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/index.js
 
 
