@@ -8,7 +8,7 @@
   "scripts": {
     "build": "npx ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "prestart": "npm install --frozen-lockfile",
-    "start": "source .env.test; npx tsx src/index.ts",
+    "start": "source .env.development; npx tsx src/index.ts",
     "lint": "npx eslint . --report-unused-disable-directives",
     "prettier": "npx prettier --check .",
     "prettier:fix": "npx prettier --write ."
@@ -44,6 +44,7 @@
     "eslint-plugin-unicorn": "56.0.1",
     "prettier": "3.6.2",
     "prettier-eslint": "16.4.2",
+    "tsx": "^4.20.3",
     "typescript": "5.8.3",
     "yaml": "2.8.0"
   }

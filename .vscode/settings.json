@@ -13,5 +13,6 @@
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "eslint.rules.customizations": [{ "rule": "*", "severity": "warn" }]
+  "eslint.rules.customizations": [{ "rule": "*", "severity": "warn" }],
+  "github.copilot.enable": { "shellscript": false }
 }
