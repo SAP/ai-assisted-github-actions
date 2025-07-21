@@ -12,7 +12,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-summary@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
+      - uses: SAP/ai-assisted-github-actions/pr-summary@3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o
@@ -28,7 +28,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-review@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
+      - uses: SAP/ai-assisted-github-actions/pr-review@3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: gpt-4o
