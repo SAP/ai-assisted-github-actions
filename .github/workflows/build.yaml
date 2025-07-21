@@ -104,7 +104,7 @@ jobs:
         uses: ./pr-summary # action.yml is in the pr-summary folder of the release branch
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: o3
           exclude-files: package-lock.json
           display-mode: comment-delta
 
@@ -122,7 +122,7 @@ jobs:
         uses: ./pr-review # action.yml is in the pr-review folder of the release branch
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: o3
           exclude-files: package-lock.json
           display-mode: review-comment-delta
 
