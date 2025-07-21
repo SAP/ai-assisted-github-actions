@@ -23,7 +23,7 @@ pids
 *.pid.lock
 
 # dotenv environment variables file
-.env.development
+.env.*
 
 # OS metadata
 .DS_Store
