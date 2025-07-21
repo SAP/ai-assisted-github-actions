@@ -32,7 +32,7 @@ jobs:
       - name: Setup Node (PR Summary)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version-file: source-folder/pr-summary/.node-version
+          node-version-file: source-folder/.tool-versions
           cache: npm
           cache-dependency-path: source-folder/pr-summary/package-lock.json
       - name: Build  (PR Summary)
@@ -45,7 +45,7 @@ jobs:
       - name: Setup Node (PR Review)
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version-file: source-folder/pr-review/.node-version
+          node-version-file: source-folder/.tool-versions
           cache: npm
           cache-dependency-path: source-folder/pr-review/package-lock.json
       - name: Build  (PR Summary)
