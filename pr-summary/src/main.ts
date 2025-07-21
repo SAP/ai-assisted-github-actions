@@ -47,10 +47,9 @@ export async function run(config: Config): Promise<void> {
     })
   }
 
-  core.info(`Get diff for PR #${config.prNumber} (${base}...${head})`)
+  core.startGroup(`Get diff for PR #${config.prNumber} (${base}...${head})`)
   const { data: diff } = await octokit.rest.repos.compareCommits({ ...repoRef, base, head, mediaType: { format: "diff" } })
   const comparison = parseDiff(diff as unknown as string)
-
   comparison.forEach(file => {
     const fileName = file.from === file.to ? file.from : `${file.from} → ${file.to}`
     const fileStatus = file.deleted ? "deleted" : file.new ? "added" : file.from !== file.to ? "renamed" : "modified" // eslint-disable-line sonarjs/no-nested-conditional
