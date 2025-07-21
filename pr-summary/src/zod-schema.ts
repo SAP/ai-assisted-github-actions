@@ -32,9 +32,9 @@ export const ModelName: ZodType<ChatModel> = z.string()
 export type ModelName = z.infer<typeof ModelName>
 
 // DeploymentConfig
-export const DeploymentConfig: ZodType<ResourceGroupConfig> = z.record(z.any())
+export const DeploymentConfig: ZodType<ResourceGroupConfig> = z.record(z.any(), z.any())
 export type DeploymentConfig = z.infer<typeof DeploymentConfig>
 
 // ModelParameters
-export const ModelParameters: ZodType<LlmModelParams> = z.record(z.any())
+export const ModelParameters: ZodType<LlmModelParams> = z.record(z.any(), z.any())
 export type ModelParameters = z.infer<typeof ModelParameters>
