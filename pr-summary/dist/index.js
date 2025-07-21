@@ -115723,7 +115723,7 @@ async function run(config) {
             });
         });
     }
-    lib_core.info(`Get diff for PR #${config.prNumber} (${base}...${head})`);
+    lib_core.startGroup(`Get diff for PR #${config.prNumber} (${base}...${head})`);
     const { data: diff } = await octokit.rest.repos.compareCommits({ ...repoRef, base, head, mediaType: { format: "diff" } });
     const comparison = parse_diff_default()(diff);
     comparison.forEach(file => {
