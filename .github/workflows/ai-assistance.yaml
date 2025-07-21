@@ -12,7 +12,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-summary@3
+      - uses: SAP/ai-assisted-github-actions/pr-summary@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: anthropic--claude-4-opus
@@ -28,7 +28,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-review@3
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
           model: anthropic--claude-4-opus
