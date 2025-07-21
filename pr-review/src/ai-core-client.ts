@@ -102,11 +102,11 @@ export async function chatCompletionWithJsonSchema<T extends z.ZodTypeAny>(zodSc
   core.info(responseJson)
   responseJson = responseJson.slice(responseJson.indexOf("{"), responseJson.lastIndexOf("}") + 1)
   try {
-    return zodSchema.parse(JSON.parse(responseJson)) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(JSON.parse(responseJson))
   } catch (error) {
     if (error instanceof Error) core.warning(`Failed to parse JSON. Trying to replace newlines. Error was: ${error.message}`)
     const json = responseJson.replaceAll(/"(?:[^"\\]|\\.)*"/g, matched => matched.replaceAll("\n", String.raw`\n`))
-    return zodSchema.parse(JSON.parse(json)) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(JSON.parse(json))
   }
 }
 
