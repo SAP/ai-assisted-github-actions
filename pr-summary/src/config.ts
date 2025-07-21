@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === "development") {
 function parseInput<T extends z.ZodTypeAny>(zodSchema: T, name: string): z.infer<T> {
   const value: string = core.getInput(name)
   try {
-    return zodSchema.parse(value) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(value)
   } catch (error) {
     if (error instanceof Error) {
       core.error(`Failed to parse input "${name}": \`${value}\``)
@@ -40,7 +40,7 @@ function parseInput<T extends z.ZodTypeAny>(zodSchema: T, name: string): z.infer
 function parseInputAsJson<T extends z.ZodTypeAny>(zodSchema: T, name: string): z.infer<T> {
   const json: string = core.getInput(name)
   try {
-    return zodSchema.parse(JSON.parse(json)) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(JSON.parse(json))
   } catch (error) {
     if (error instanceof Error) {
       core.error(`Failed to parse input "${name}": \`${json}\``)
@@ -56,7 +56,7 @@ function parseInputAsArray<T extends z.ZodTypeAny>(zodSchema: T, name: string): 
     .split(/[\n,]/)
     .map(v => v.trim())
     .filter(Boolean)
-    .map(v => zodSchema.parse(v) as z.infer<T>) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    .map(v => zodSchema.parse(v) as z.infer<T>)
 }
 
 function setSecret<T>(value: T): T {

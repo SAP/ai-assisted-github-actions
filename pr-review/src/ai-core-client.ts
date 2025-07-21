@@ -3,7 +3,6 @@ import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orches
 import axios from "axios"
 import { inspect } from "node:util"
 import { z } from "zod"
-import { zodToJsonSchema } from "zod-to-json-schema"
 import { config } from "./config.js"
 
 let modelName = config.model
@@ -63,7 +62,7 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
  */
 export async function chatCompletionWithJsonSchema<T extends z.ZodTypeAny>(zodSchema: T, messages: ChatMessage[]): Promise<z.infer<T>> {
   process.env.AICORE_SERVICE_KEY = JSON.stringify(config.aicoreServiceKey)
-  const jsonSchema = zodToJsonSchema(zodSchema)
+  const jsonSchema = z.toJSONSchema(zodSchema)
 
   let responseJson
   try {
@@ -102,11 +101,11 @@ export async function chatCompletionWithJsonSchema<T extends z.ZodTypeAny>(zodSc
   core.info(responseJson)
   responseJson = responseJson.slice(responseJson.indexOf("{"), responseJson.lastIndexOf("}") + 1)
   try {
-    return zodSchema.parse(JSON.parse(responseJson)) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(JSON.parse(responseJson))
   } catch (error) {
     if (error instanceof Error) core.warning(`Failed to parse JSON. Trying to replace newlines. Error was: ${error.message}`)
     const json = responseJson.replaceAll(/"(?:[^"\\]|\\.)*"/g, matched => matched.replaceAll("\n", String.raw`\n`))
-    return zodSchema.parse(JSON.parse(json)) // eslint-disable-line @typescript-eslint/no-unsafe-return
+    return zodSchema.parse(JSON.parse(json))
   }
 }
 
