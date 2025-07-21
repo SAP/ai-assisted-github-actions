@@ -8,6 +8,9 @@ jobs:
     name: PR Summary
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: SAP/ai-assisted-github-actions/pr-summary@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
         with:
@@ -21,6 +24,9 @@ jobs:
     name: PR Review
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: SAP/ai-assisted-github-actions/pr-review@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
         with:
