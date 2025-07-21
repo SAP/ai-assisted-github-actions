@@ -23,9 +23,7 @@ pids
 *.pid.lock
 
 # dotenv environment variables file
-.env
-.env.test
-test-event.json
+.env.development
 
 # OS metadata
 .DS_Store
