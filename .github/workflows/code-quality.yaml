@@ -12,6 +12,8 @@ jobs:
   lintCheck:
     runs-on: [ubuntu-latest]
     name: Linter (${{ matrix.path }})
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -35,6 +37,8 @@ jobs:
   formatCheck:
     runs-on: [ubuntu-latest]
     name: Formatter (${{ matrix.path }})
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

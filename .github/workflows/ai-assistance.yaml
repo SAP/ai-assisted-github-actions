@@ -8,11 +8,14 @@ jobs:
     name: PR Summary
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-summary@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
+      - uses: SAP/ai-assisted-github-actions/pr-summary@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: anthropic--claude-4-sonnet
           exclude-files: package-lock.json
           display-mode: append
           header-text: "---"
@@ -21,9 +24,12 @@ jobs:
     name: PR Review
     if: github.actor != 'ospo-renovate[bot]'
     runs-on: [ubuntu-latest]
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: SAP/ai-assisted-github-actions/pr-review@93162bffd6b396623ffa5b20e4666e427db88414 # v3.0.2
+      - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: anthropic--claude-4-sonnet
           exclude-files: package-lock.json

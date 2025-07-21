@@ -29,6 +29,15 @@
         "/^@?octokit//",
         "/^eslint$/"
       ]
+    },
+    {
+      "matchDepTypes": [
+        "action"
+      ],
+      "matchPackageNames": [
+        "SAP/ai-assisted-github-actions"
+      ],
+      "enabled": false
     }
   ],
   "schedule": [
