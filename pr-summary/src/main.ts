@@ -23,7 +23,7 @@ export async function run(config: Config): Promise<void> {
 
   const throttlingOptions: ThrottlingOptions = { onSecondaryRateLimit: () => true, onRateLimit: () => true }
   const octokit = github.getOctokit(config.userToken, { baseUrl: config.githubApiUrl, throttle: throttlingOptions }, throttling, retry)
-  const matchOptions: MinimatchOptions = { dot: true, nocase: true }
+  const matchOptions: MinimatchOptions = { matchBase: true, dot: true, nocase: true }
   const repoRef = { owner: config.owner, repo: config.repo }
 
   core.info(`Get PR #${config.prNumber} from ${repoRef.owner}/${repoRef.repo}`)
