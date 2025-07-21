@@ -116701,7 +116701,7 @@ async function run(config) {
     lib_core.info(`Using the following configuration: ${(0,external_node_util_.inspect)(config, { depth: undefined, colors: true })}`);
     const throttlingOptions = { onSecondaryRateLimit: () => true, onRateLimit: () => true };
     const octokit = github.getOctokit(config.userToken, { baseUrl: config.githubApiUrl, throttle: throttlingOptions }, plugin_throttling_dist_node.throttling, dist_node.retry);
-    const matchOptions = { dot: true, nocase: true };
+    const matchOptions = { matchBase: true, dot: true, nocase: true };
     const repoRef = { owner: config.owner, repo: config.repo };
     lib_core.info(`Get PR #${config.prNumber} from ${repoRef.owner}/${repoRef.repo}`);
     const { data: pullRequest } = await octokit.rest.pulls.get({ ...repoRef, pull_number: config.prNumber });
