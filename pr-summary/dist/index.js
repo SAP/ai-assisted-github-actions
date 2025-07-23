@@ -100956,7 +100956,7 @@ if (process.env.NODE_ENV === "development") {
     // eslint-disable-next-line @typescript-eslint/no-for-in-array, no-restricted-syntax, guard-for-in
     for (const key in actionYaml.inputs) {
         const envKey = `INPUT_${key.toUpperCase()}`;
-        const envValue = actionYaml.inputs[key].default;
+        const envValue = actionYaml.inputs[key]?.default;
         if (envValue && !Object.keys(process.env).includes(envKey)) {
             process.env[envKey] = envValue;
         }

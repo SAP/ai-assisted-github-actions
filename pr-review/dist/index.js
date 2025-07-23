@@ -100956,7 +100956,7 @@ if (process.env.NODE_ENV === "development") {
     // eslint-disable-next-line @typescript-eslint/no-for-in-array, no-restricted-syntax, guard-for-in
     for (const key in actionYaml.inputs) {
         const envKey = `INPUT_${key.toUpperCase()}`;
-        const envValue = actionYaml.inputs[key].default;
+        const envValue = actionYaml.inputs[key]?.default;
         if (envValue && !Object.keys(process.env).includes(envKey)) {
             process.env[envKey] = envValue;
         }
@@ -116618,46 +116618,53 @@ function resolveHunkReferencesInComments(comments, files) {
         }
         else {
             const hunkChangeMap = currentFile.chunks.flatMap(hunk => hunk.changes.map(change => ({ change, hunk })));
-            let { change: startChange, hunk: startHunk } = hunkChangeMap[comment.start - 1]; // eslint-disable-line prefer-const
-            let { change: endChange, hunk: endHunk } = hunkChangeMap[comment.end - 1]; // eslint-disable-line prefer-const
-            if (!startHunk) {
-                lib_core.warning(`Could not find hunk for comment on ${comment.path}, start ${comment.start}, end ${comment.end}, ${comment.comment}, skipping.`);
+            const startEntry = hunkChangeMap[comment.start - 1];
+            const endEntry = hunkChangeMap[comment.end - 1];
+            if (!startEntry || !endEntry) {
+                lib_core.error(`Could not find hunk for comment on ${comment.path}, start ${comment.start}, end ${comment.end}, ${comment.comment}, skipping.`);
             }
             else {
-                if (startHunk !== endHunk)
-                    endChange = startHunk.changes.at(-1);
-                const startSide = startChange.type !== "del" ? "RIGHT" : "LEFT";
-                const endSide = endChange.type !== "del" ? "RIGHT" : "LEFT";
-                // get start line of the actual comment
-                let start;
-                if (startChange.type === "normal") {
-                    start = startChange.ln2;
+                const { change: startChange, hunk: startHunk } = startEntry;
+                let { change: endChange, hunk: endHunk } = endEntry; // eslint-disable-line prefer-const
+                if (!startHunk) {
+                    lib_core.warning(`Could not find hunk for comment on ${comment.path}, start ${comment.start}, end ${comment.end}, ${comment.comment}, skipping.`);
                 }
-                else if (startChange.type === "add" || startChange.type === "del") {
-                    start = startChange.ln;
+                else {
+                    if (startHunk !== endHunk)
+                        endChange = startHunk.changes.at(-1);
+                    const startSide = startChange.type !== "del" ? "RIGHT" : "LEFT";
+                    const endSide = endChange.type !== "del" ? "RIGHT" : "LEFT";
+                    // get start line of the actual comment
+                    let start;
+                    if (startChange.type === "normal") {
+                        start = startChange.ln2;
+                    }
+                    else if (startChange.type === "add" || startChange.type === "del") {
+                        start = startChange.ln;
+                    }
+                    else
+                        throw new Error(`Unknown change type.`);
+                    // get end line of the actual comment
+                    let end;
+                    if (endChange.type === "normal") {
+                        end = endChange.ln2;
+                    }
+                    else if (endChange.type === "add" || endChange.type === "del") {
+                        end = endChange.ln;
+                    }
+                    else
+                        throw new Error(`Unknown change type.`);
+                    // make sure start and end are within the hunk
+                    end = Math.min(end, endSide === "RIGHT" ? startHunk.newStart + startHunk.newLines - 1 : startHunk.oldStart + startHunk.oldLines - 1);
+                    result.push({
+                        path: comment.path,
+                        start_side: startSide !== endSide ? startSide : undefined, // only set start_side if it is a multi-line comment
+                        side: startSide !== endSide ? endSide : startSide,
+                        start_line: start !== end && start < end ? start : undefined, // only set start_line if it is a multi-line comment, start must be less than end
+                        line: start !== end && start < end ? end : start,
+                        body: comment.comment,
+                    });
                 }
-                else
-                    throw new Error(`Unknown change type.`);
-                // get end line of the actual comment
-                let end;
-                if (endChange.type === "normal") {
-                    end = endChange.ln2;
-                }
-                else if (endChange.type === "add" || endChange.type === "del") {
-                    end = endChange.ln;
-                }
-                else
-                    throw new Error(`Unknown change type.`);
-                // make sure start and end are within the hunk
-                end = Math.min(end, endSide === "RIGHT" ? startHunk.newStart + startHunk.newLines - 1 : startHunk.oldStart + startHunk.oldLines - 1);
-                result.push({
-                    path: comment.path,
-                    start_side: startSide !== endSide ? startSide : undefined, // only set start_side if it is a multi-line comment
-                    side: startSide !== endSide ? endSide : startSide,
-                    start_line: start !== end && start < end ? start : undefined, // only set start_line if it is a multi-line comment, start must be less than end
-                    line: start !== end && start < end ? end : start,
-                    body: comment.comment,
-                });
             }
         }
     });
