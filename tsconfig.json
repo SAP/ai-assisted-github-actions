@@ -17,5 +17,9 @@
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true
   },
-  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage"]
+  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage"],
+  "references": [
+    { "path": "pr-review/tsconfig.json" },
+    { "path": "pr-summary/tsconfig.json" }
+  ]
 }
