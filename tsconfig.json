@@ -1,6 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
+    "composite": true,
     "target": "esnext",
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -17,9 +18,5 @@
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true
   },
-  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage"],
-  "references": [
-    { "path": "pr-review/tsconfig.json" },
-    { "path": "pr-summary/tsconfig.json" }
-  ]
+  "exclude": ["./dist", "./node_modules", "./__tests__", "./coverage"]
 }
