@@ -43,8 +43,8 @@ export async function run(config: Config): Promise<void> {
     const regex = new RegExp(`^${markerStart}\\s+<!-- (?<base>\\w+)\\.\\.\\.(?<head>\\w+) -->([\\s\\S]*?)${markerEnd}$`, "g")
     previousReviews.forEach(comment => {
       ;[...(comment.body?.matchAll(regex) ?? [])].forEach(match => {
-        const commentBase = match.groups!.base
-        const commentHead = match.groups!.head
+        const commentBase = match.groups!.base!
+        const commentHead = match.groups!.head!
         if (commentHead) base = commentHead !== head ? commentHead : commentBase
       })
     })
