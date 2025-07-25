@@ -17,5 +17,4 @@ export const AiReview = z.object({
       .describe("List of comments on specific code parts."),
   ),
 })
-// eslint-disable-next-line @typescript-eslint/no-redeclare
 export type AiReview = z.infer<typeof AiReview>

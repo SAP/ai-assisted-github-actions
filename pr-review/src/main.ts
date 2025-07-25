@@ -97,14 +97,12 @@ export async function run(config: Config): Promise<void> {
     const {
       data: { tree },
     } = await octokit.rest.git.getTree({ ...repoRef, tree_sha: pullRequest.head.sha, recursive: "true" })
-    // eslint-disable-next-line no-restricted-syntax
     for (const file of tree) {
       if (file.path && file.sha && config.includeContextFiles.some(pattern => minimatch(file.path!, pattern, matchOptions))) {
         if (config.excludeContextFiles.some(pattern => minimatch(file.path!, pattern, matchOptions))) {
           core.info(`Skipping context file ${file.path} (is excluded).`)
         } else {
           core.info(`Reading context file ${file.path}`)
-          // eslint-disable-next-line no-await-in-loop
           const { data: blob } = await octokit.rest.git.getBlob({ ...repoRef, file_sha: file.sha, mediaType: { format: "raw" } })
           const result = [`Context file ${file.path}:`, "```", blob as unknown as string, "```", ""]
           core.info(result.join("\n"))

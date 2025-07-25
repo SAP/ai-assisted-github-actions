@@ -10,7 +10,7 @@ export function helpAIwithHunksInDiff(file: File): string {
   const diff: string[] = []
   let lineNo = 0
 
-  const fileStatus = file.deleted ? "deleted" : file.new ? "added" : file.from !== file.to ? "renamed" : "modified" // eslint-disable-line sonarjs/no-nested-conditional
+  const fileStatus = file.deleted ? "deleted" : file.new ? "added" : file.from !== file.to ? "renamed" : "modified" // eslint-disable-line sonarjs/no-nested-conditional, unicorn/no-nested-ternary
   if (file.chunks.length > 0) {
     diff.push("", `## Diff of the ${fileStatus} file \`${file.to ?? file.from}\``, "\n")
     file.chunks.forEach(hunk => {

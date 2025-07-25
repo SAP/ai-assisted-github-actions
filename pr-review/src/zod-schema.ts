@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-redeclare */
 import { ResourceGroupConfig } from "@sap-ai-sdk/ai-api"
 import { ChatModel, LlmModelParams } from "@sap-ai-sdk/orchestration"
 import { z, ZodType } from "zod"
