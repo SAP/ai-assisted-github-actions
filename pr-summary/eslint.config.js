@@ -1,9 +1,9 @@
-import js from "@eslint/js";
-import importPlugin from "eslint-plugin-import";
-import sonarjs from "eslint-plugin-sonarjs";
-import eslintPluginUnicorn from "eslint-plugin-unicorn";
-import { defineConfig, globalIgnores } from "eslint/config";
-import tseslint from "typescript-eslint";
+import js from "@eslint/js"
+import importPlugin from "eslint-plugin-import"
+import sonarjs from "eslint-plugin-sonarjs"
+import eslintPluginUnicorn from "eslint-plugin-unicorn"
+import { defineConfig, globalIgnores } from "eslint/config"
+import tseslint from "typescript-eslint"
 
 // eslint-disable-next-line import/no-default-export
 export default defineConfig([
@@ -42,4 +42,4 @@ export default defineConfig([
       "import/no-unresolved": "off",
     },
   },
-]);
+])
