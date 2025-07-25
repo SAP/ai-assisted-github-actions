@@ -95572,6 +95572,7 @@ const le = "0.1.1";
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:fs");
+var external_node_fs_default = /*#__PURE__*/__nccwpck_require__.n(external_node_fs_namespaceObject);
 // EXTERNAL MODULE: ./node_modules/yaml/dist/index.js
 var dist = __nccwpck_require__(38815);
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/core.js
@@ -103073,6 +103074,9 @@ minimatch.Minimatch = Minimatch;
 minimatch.escape = escape_escape;
 minimatch.unescape = unescape_unescape;
 //# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:path");
+var external_node_path_default = /*#__PURE__*/__nccwpck_require__.n(external_node_path_namespaceObject);
 // EXTERNAL MODULE: external "node:util"
 var external_node_util_ = __nccwpck_require__(57975);
 // EXTERNAL MODULE: ./node_modules/parse-diff/index.js
@@ -115718,6 +115722,8 @@ function getErrorMessage(error) {
 
 
 
+
+
 /**
  * The main function for the action.
  * @returns {Promise<void>} Resolves when the action is complete.
@@ -115779,7 +115785,7 @@ async function run(config) {
         return;
     }
     if (config.includeContextFiles.length > 0) {
-        lib_core.startGroup(`Get static files for PR`);
+        lib_core.startGroup(`Get static files for PR (GitHub API)`);
         const { data: { tree }, } = await octokit.rest.git.getTree({ ...repoRef, tree_sha: pullRequest.head.sha, recursive: "true" });
         for (const file of tree) {
             if (file.path && file.sha && config.includeContextFiles.some(pattern => minimatch(file.path, pattern, matchOptions))) {
@@ -115792,6 +115798,24 @@ async function run(config) {
                     const result = [`Context file ${file.path}:`, "```", blob, "```", ""];
                     lib_core.info(result.join("\n"));
                     content.push(...result);
+                }
+            }
+        }
+        lib_core.startGroup(`Get static files for PR (runner's filesystem)`);
+        for (const entry of external_node_fs_default().readdirSync(".", { withFileTypes: true, recursive: true })) {
+            if (entry.isFile()) {
+                const filePath = entry.parentPath !== "." ? external_node_path_default().join(entry.parentPath, entry.name) : entry.name;
+                if (config.includeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+                    if (config.excludeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+                        lib_core.info(`Skipping context file ${filePath} (is excluded).`);
+                    }
+                    else {
+                        lib_core.info(`Reading context file ${filePath}`);
+                        const blob = external_node_fs_default().readFileSync(filePath, "utf8");
+                        const result = [`Context file ${filePath}:`, "```", blob, "```", ""];
+                        lib_core.info(result.join("\n"));
+                        content.push(...result);
+                    }
                 }
             }
         }
