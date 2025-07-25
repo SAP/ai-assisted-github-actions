@@ -5,6 +5,8 @@ import { retry } from "@octokit/plugin-retry"
 import { throttling, ThrottlingOptions } from "@octokit/plugin-throttling"
 import { ChatMessage } from "@sap-ai-sdk/orchestration"
 import { minimatch, MinimatchOptions } from "minimatch"
+import fs from "node:fs"
+import path from "node:path"
 import { inspect } from "node:util"
 import parseDiff, { Chunk, File } from "parse-diff"
 import * as aiCoreClient from "./ai-core-client.js"
@@ -93,7 +95,7 @@ export async function run(config: Config): Promise<void> {
   core.info(content.join("\n"))
 
   if (config.includeContextFiles.length > 0) {
-    core.startGroup(`Get static files for PR`)
+    core.startGroup(`Get static files for PR (GitHub API)`)
     const {
       data: { tree },
     } = await octokit.rest.git.getTree({ ...repoRef, tree_sha: pullRequest.head.sha, recursive: "true" })
@@ -107,6 +109,23 @@ export async function run(config: Config): Promise<void> {
           const result = [`Context file ${file.path}:`, "```", blob as unknown as string, "```", ""]
           core.info(result.join("\n"))
           content.push(...result)
+        }
+      }
+    }
+    core.startGroup(`Get static files for PR (runner's filesystem)`)
+    for (const entry of fs.readdirSync(".", { withFileTypes: true, recursive: true })) {
+      if (entry.isFile()) {
+        const filePath = entry.parentPath !== "." ? path.join(entry.parentPath, entry.name) : entry.name
+        if (config.includeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+          if (config.excludeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+            core.info(`Skipping context file ${filePath} (is excluded).`)
+          } else {
+            core.info(`Reading context file ${filePath}`)
+            const blob = fs.readFileSync(filePath, "utf8")
+            const result = [`Context file ${filePath}:`, "```", blob, "```", ""]
+            core.info(result.join("\n"))
+            content.push(...result)
+          }
         }
       }
     }
