@@ -14,7 +14,7 @@ if (process.env.NODE_ENV === "development") {
 
   // read action.yml and set default values for inputs
   const actionYaml = parse(readFileSync("./action.yml", "utf8")) as { inputs: { default: string }[] }
-  // eslint-disable-next-line @typescript-eslint/no-for-in-array, no-restricted-syntax, guard-for-in
+  // eslint-disable-next-line @typescript-eslint/no-for-in-array
   for (const key in actionYaml.inputs) {
     const envKey = `INPUT_${key.toUpperCase()}`
     const envValue = actionYaml.inputs[key]?.default

@@ -1,6 +1,6 @@
 import * as core from "@actions/core"
 import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orchestration"
-import axios from "axios"
+import { isAxiosError } from "axios"
 import { inspect } from "node:util"
 import { config } from "./config.js"
 
@@ -54,13 +54,13 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
+  if (isAxiosError(error)) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const message: string = error.response?.data?.error?.message ?? error.response?.data?.message ?? error.message
     return message
   }
   if (error instanceof Error) {
-    return axios.isAxiosError(error.cause) ? getErrorMessage(error.cause) : error.message
+    return isAxiosError(error.cause) ? getErrorMessage(error.cause) : error.message
   }
   return String(error)
 }
