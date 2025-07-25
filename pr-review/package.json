@@ -6,12 +6,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npx ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "prestart": "npm install --frozen-lockfile",
-    "start": "source .env.development; npx tsx src/index.ts",
-    "lint": "npx eslint . --report-unused-disable-directives",
-    "prettier": "npx prettier --check .",
-    "prettier:fix": "npx prettier --write ."
+    "start": "npx tsx --env-file=.env.development src/index.ts",
+    "lint": "eslint . --report-unused-disable-directives",
+    "prettier": "prettier --check .",
+    "prettier:fix": "prettier --write ."
   },
   "dependencies": {
     "@actions/core": "1.11.1",
