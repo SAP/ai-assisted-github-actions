@@ -36,6 +36,7 @@
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-sonarjs": "3.0.4",
     "eslint-plugin-unicorn": "60.0.0",
+    "npx": "10.2.2",
     "prettier": "3.6.2",
     "tsx": "4.20.3",
     "typescript": "5.8.3",
