@@ -95670,6 +95670,7 @@ const html5Email = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]
 const rfc5322Email = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 /** A loose regex that allows Unicode characters, enforces length limits, and that's about it. */
 const unicodeEmail = /^[^\s@"]{1,64}@[^\s@]{1,255}$/u;
+const idnEmail = /^[^\s@"]{1,64}@[^\s@]{1,255}$/u;
 const browserEmail = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 // from https://thekevinscott.com/emojis-in-javascript/#writing-a-regular-expression
 const _emoji = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
@@ -95684,9 +95685,8 @@ const cidrv6 = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|::|([0-9a-fA-F]{1,4})?:
 const base64 = /^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$/;
 const base64url = /^[A-Za-z0-9_-]*$/;
 // based on https://stackoverflow.com/questions/106179/regular-expression-to-match-dns-hostname-or-ip-address
-// export const hostname: RegExp =
-//   /^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)+([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/;
-const hostname = /^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+$/;
+// export const hostname: RegExp = /^([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+$/;
+const hostname = /^(?=.{1,253}\.?$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[-0-9a-zA-Z]{0,61}[0-9a-zA-Z])?)*\.?$/;
 const domain = /^([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 // https://blog.stevenlevithan.com/archives/validate-phone-number#r4-3 (regex sans spaces)
 const e164 = /^\+(?:[0-9]){6,14}[0-9]$/;
@@ -95713,8 +95713,9 @@ function datetime(args) {
     const opts = ["Z"];
     if (args.local)
         opts.push("");
+    // if (args.offset) opts.push(`([+-]\\d{2}:\\d{2})`);
     if (args.offset)
-        opts.push(`([+-]\\d{2}:\\d{2})`);
+        opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
     const timeRegex = `${time}(?:${opts.join("|")})`;
     return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
 }
@@ -95786,22 +95787,33 @@ function cleanRegex(source) {
 }
 function floatSafeRemainder(val, step) {
     const valDecCount = (val.toString().split(".")[1] || "").length;
-    const stepDecCount = (step.toString().split(".")[1] || "").length;
+    const stepString = step.toString();
+    let stepDecCount = (stepString.split(".")[1] || "").length;
+    if (stepDecCount === 0 && /\d?e-\d?/.test(stepString)) {
+        const match = stepString.match(/\d?e-(\d?)/);
+        if (match?.[1]) {
+            stepDecCount = Number.parseInt(match[1]);
+        }
+    }
     const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
     const valInt = Number.parseInt(val.toFixed(decCount).replace(".", ""));
     const stepInt = Number.parseInt(step.toFixed(decCount).replace(".", ""));
     return (valInt % stepInt) / 10 ** decCount;
 }
+const EVALUATING = Symbol("evaluating");
 function defineLazy(object, key, getter) {
-    const set = false;
+    let value = undefined;
     Object.defineProperty(object, key, {
         get() {
-            if (!set) {
-                const value = getter();
-                object[key] = value;
-                return value;
+            if (value === EVALUATING) {
+                // Circular reference detected, return undefined to break the cycle
+                return undefined;
             }
-            throw new Error("cached value already set");
+            if (value === undefined) {
+                value = EVALUATING;
+                value = getter();
+            }
+            return value;
         },
         set(v) {
             Object.defineProperty(object, key, {
@@ -96174,6 +96186,7 @@ function required(Class, schema, mask) {
     });
     return clone(schema, def);
 }
+// invalid_type | too_big | too_small | invalid_format | not_multiple_of | unrecognized_keys | invalid_union | invalid_key | invalid_element | invalid_value | custom
 function aborted(x, startIndex = 0) {
     for (let i = startIndex; i < x.issues.length; i++) {
         if (x.issues[i]?.continue !== true) {
@@ -96382,6 +96395,7 @@ const $ZodCheckNumberFormat = /*@__PURE__*/ $constructor("$ZodCheckNumberFormat"
                     expected: origin,
                     format: def.format,
                     code: "invalid_type",
+                    continue: false,
                     input,
                     inst,
                 });
@@ -96811,6 +96825,7 @@ const $ZodCheckMimeType = /*@__PURE__*/ (/* unused pure expression or super */ n
             values: def.mime,
             input: payload.value.type,
             inst,
+            continue: !def.abort,
         });
     };
 })));
@@ -97634,13 +97649,6 @@ function _custom(Class, fn, _params) {
     });
     return schema;
 }
-// export function _refine<T>(
-//   Class: util.SchemaClass<schemas.$ZodCustom>,
-//   fn: (arg: NoInfer<T>) => util.MaybeAsync<unknown>,
-//   _params: string | $ZodCustomParams = {}
-// ): checks.$ZodCheck<T> {
-//   return _custom(Class, fn, _params);
-// }
 // same as _custom but defaults to abort:false
 function _refine(Class, fn, _params) {
     const schema = new Class({
@@ -97650,6 +97658,36 @@ function _refine(Class, fn, _params) {
         ...normalizeParams(_params),
     });
     return schema;
+}
+function _superRefine(fn) {
+    const ch = _check((payload) => {
+        payload.addIssue = (issue) => {
+            if (typeof issue === "string") {
+                payload.issues.push(util_issue(issue, payload.value, ch._zod.def));
+            }
+            else {
+                // for Zod 3 backwards compatibility
+                const _issue = issue;
+                if (_issue.fatal)
+                    _issue.continue = false;
+                _issue.code ?? (_issue.code = "custom");
+                _issue.input ?? (_issue.input = payload.value);
+                _issue.inst ?? (_issue.inst = ch);
+                _issue.continue ?? (_issue.continue = !ch._zod.def.abort);
+                payload.issues.push(util_issue(_issue));
+            }
+        };
+        return fn(payload.value, payload);
+    });
+    return ch;
+}
+function _check(fn, params) {
+    const ch = new $ZodCheck({
+        check: "custom",
+        ...normalizeParams(params),
+    });
+    ch._zod.check = fn;
+    return ch;
 }
 function _stringbool(Classes, _params) {
     const params = util.normalizeParams(_params);
@@ -97684,6 +97722,7 @@ function _stringbool(Classes, _params) {
                     values: [...truthySet, ...falsySet],
                     input: payload.value,
                     inst: tx,
+                    continue: false,
                 });
                 return {};
             }
@@ -98017,7 +98056,7 @@ const safeParseAsync = /* @__PURE__*/ _safeParseAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 0,
-    patch: 10,
+    patch: 14,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -98884,7 +98923,12 @@ const $ZodUnion = /*@__PURE__*/ $constructor("$ZodUnion", (inst, def) => {
         }
         return undefined;
     });
+    const single = def.options.length === 1;
+    const first = def.options[0]._zod.run;
     inst._zod.parse = (payload, ctx) => {
+        if (single) {
+            return first(payload, ctx);
+        }
         let async = false;
         const results = [];
         for (const option of def.options) {
@@ -99076,10 +99120,10 @@ const $ZodTuple = /*@__PURE__*/ (/* unused pure expression or super */ null && (
             const tooSmall = input.length < optStart - 1;
             if (tooBig || tooSmall) {
                 payload.issues.push({
+                    ...(tooBig ? { code: "too_big", maximum: items.length } : { code: "too_small", minimum: items.length }),
                     input,
                     inst,
                     origin: "array",
-                    ...(tooBig ? { code: "too_big", maximum: items.length } : { code: "too_small", minimum: items.length }),
                 });
                 return payload;
             }
@@ -99191,8 +99235,8 @@ const $ZodRecord = /*@__PURE__*/ $constructor("$ZodRecord", (inst, def) => {
                 }
                 if (keyResult.issues.length) {
                     payload.issues.push({
-                        origin: "record",
                         code: "invalid_key",
+                        origin: "record",
                         issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config())),
                         input: key,
                         path: [key],
@@ -99263,8 +99307,8 @@ function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
         }
         else {
             final.issues.push({
-                origin: "map",
                 code: "invalid_key",
+                origin: "map",
                 input,
                 inst,
                 issues: keyResult.issues.map((iss) => util.finalizeIssue(iss, ctx, core.config())),
@@ -99402,6 +99446,12 @@ const $ZodTransform = /*@__PURE__*/ $constructor("$ZodTransform", (inst, def) =>
         return payload;
     };
 });
+function handleOptionalResult(result, input) {
+    if (result.issues.length && input === undefined) {
+        return { issues: [], value: undefined };
+    }
+    return result;
+}
 const $ZodOptional = /*@__PURE__*/ $constructor("$ZodOptional", (inst, def) => {
     $ZodType.init(inst, def);
     inst._zod.optin = "optional";
@@ -99415,7 +99465,10 @@ const $ZodOptional = /*@__PURE__*/ $constructor("$ZodOptional", (inst, def) => {
     });
     inst._zod.parse = (payload, ctx) => {
         if (def.innerType._zod.optin === "optional") {
-            return def.innerType._zod.run(payload, ctx);
+            const result = def.innerType._zod.run(payload, ctx);
+            if (result instanceof Promise)
+                return result.then((r) => handleOptionalResult(r, payload.value));
+            return handleOptionalResult(result, payload.value);
         }
         if (payload.value === undefined) {
             return payload;
@@ -99662,11 +99715,18 @@ const $ZodPromise = /*@__PURE__*/ (/* unused pure expression or super */ null &&
 })));
 const $ZodLazy = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("$ZodLazy", (inst, def) => {
     $ZodType.init(inst, def);
+    // let _innerType!: any;
+    // util.defineLazy(def, "getter", () => {
+    //   if (!_innerType) {
+    //     _innerType = def.getter();
+    //   }
+    //   return () => _innerType;
+    // });
     util.defineLazy(inst._zod, "innerType", () => def.getter());
     util.defineLazy(inst._zod, "pattern", () => inst._zod.innerType._zod.pattern);
     util.defineLazy(inst._zod, "propValues", () => inst._zod.innerType._zod.propValues);
-    util.defineLazy(inst._zod, "optin", () => inst._zod.innerType._zod.optin);
-    util.defineLazy(inst._zod, "optout", () => inst._zod.innerType._zod.optout);
+    util.defineLazy(inst._zod, "optin", () => inst._zod.innerType._zod.optin ?? undefined);
+    util.defineLazy(inst._zod, "optout", () => inst._zod.innerType._zod.optout ?? undefined);
     inst._zod.parse = (payload, ctx) => {
         const inner = inst._zod.innerType;
         return inner._zod.run(payload, ctx);
@@ -100158,6 +100218,9 @@ const ZodCustomStringFormat = /*@__PURE__*/ (/* unused pure expression or super 
 })));
 function stringFormat(format, fnOrRegex, _params = {}) {
     return core._stringFormat(ZodCustomStringFormat, format, fnOrRegex, _params);
+}
+function schemas_hostname(_params) {
+    return core._stringFormat(ZodCustomStringFormat, "hostname", core.regexes.hostname, _params);
 }
 const ZodNumber = /*@__PURE__*/ $constructor("ZodNumber", (inst, def) => {
     $ZodNumber.init(inst, def);
@@ -100789,7 +100852,7 @@ const ZodCustom = /*@__PURE__*/ $constructor("ZodCustom", (inst, def) => {
 });
 // custom checks
 function check(fn) {
-    const ch = new $ZodCheck({
+    const ch = new core.$ZodCheck({
         check: "custom",
         // ...util.normalizeParams(params),
     });
@@ -100804,26 +100867,7 @@ function refine(fn, _params = {}) {
 }
 // superRefine
 function superRefine(fn) {
-    const ch = check((payload) => {
-        payload.addIssue = (issue) => {
-            if (typeof issue === "string") {
-                payload.issues.push(util_issue(issue, payload.value, ch._zod.def));
-            }
-            else {
-                // for Zod 3 backwards compatibility
-                const _issue = issue;
-                if (_issue.fatal)
-                    _issue.continue = false;
-                _issue.code ?? (_issue.code = "custom");
-                _issue.input ?? (_issue.input = payload.value);
-                _issue.inst ?? (_issue.inst = ch);
-                _issue.continue ?? (_issue.continue = !ch._zod.def.abort);
-                payload.issues.push(util_issue(_issue));
-            }
-        };
-        return fn(payload.value, payload);
-    });
-    return ch;
+    return _superRefine(fn);
 }
 function _instanceof(cls, params = {
     error: `Input not instance of ${cls.name}`,
@@ -103082,12 +103126,12 @@ var external_node_util_ = __nccwpck_require__(57975);
 // EXTERNAL MODULE: ./node_modules/parse-diff/index.js
 var parse_diff = __nccwpck_require__(82673);
 var parse_diff_default = /*#__PURE__*/__nccwpck_require__.n(parse_diff);
-// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/util/dist/index.js
-var util_dist = __nccwpck_require__(9471);
 // EXTERNAL MODULE: external "node:stream"
 var external_node_stream_ = __nccwpck_require__(57075);
 ;// CONCATENATED MODULE: external "node:stream/consumers"
 const consumers_namespaceObject = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("node:stream/consumers");
+// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/util/dist/index.js
+var util_dist = __nccwpck_require__(9471);
 // EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/http-client/dist/index.js
 var http_client_dist = __nccwpck_require__(36063);
 // EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/dist/index.js
@@ -103654,7 +103698,7 @@ class OrchestrationStreamChunkResponse {
     /**
      * Parses the chunk response and returns the choice by index.
      * @param index - The index of the choice to find.
-     * @returns An {@link LLMChoiceStreaming} object associated withe index.
+     * @returns An {@link LLMChoiceStreaming} object associated with the index.
      */
     findChoiceByIndex(index) {
         return this.getChoices()?.find((c) => c.index === index);
@@ -103664,6 +103708,493 @@ class OrchestrationStreamChunkResponse {
     }
 }
 //# sourceMappingURL=orchestration-stream-chunk-response.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-types.js
+/**
+ * A descriptive constant for Azure content safety filter threshold.
+ * @internal
+ */
+const orchestration_types_supportedAzureFilterThresholds = {
+    ALLOW_SAFE: 0,
+    ALLOW_SAFE_LOW: 2,
+    ALLOW_SAFE_LOW_MEDIUM: 4,
+    ALLOW_ALL: 6
+};
+//# sourceMappingURL=orchestration-types.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/filtering.js
+
+/**
+ * Convenience function to build Azure content filter.
+ * @param filter - Filtering configuration for Azure filter. If skipped, the default Azure content filter configuration is used.
+ * @returns An object with the Azure filtering configuration.
+ * @deprecated Since 1.8.0. Use {@link buildAzureContentSafetyFilter()} instead.
+ */
+function buildAzureContentFilter(filter) {
+    if (filter && !Object.keys(filter).length) {
+        throw new Error('Filter property cannot be an empty object');
+    }
+    return {
+        filters: [
+            {
+                type: 'azure_content_safety',
+                ...(filter && { config: filter })
+            }
+        ]
+    };
+}
+/**
+ * Convenience function to build Azure content filter.
+ * @param config - Configuration for Azure content safety filter.
+ * If skipped, the default configuration of `ALLOW_SAFE_LOW` is used for all filter categories.
+ * @returns Filter config object.
+ * @example "buildAzureContentSafetyFilter({ Hate: 'ALLOW_SAFE', Violence: 'ALLOW_SAFE_LOW_MEDIUM' })"
+ */
+function buildAzureContentSafetyFilter(config) {
+    if (config && !Object.keys(config).length) {
+        throw new Error('Filtering configuration cannot be an empty object');
+    }
+    return {
+        type: 'azure_content_safety',
+        ...(config && {
+            config: {
+                ...Object.fromEntries(Object.entries(config).map(([key, value]) => [
+                    key,
+                    supportedAzureFilterThresholds[value]
+                ]))
+            }
+        })
+    };
+}
+/**
+ * Convenience function to build Llama guard filter.
+ * @param categories - Categories to be enabled for filtering. Provide at least one category.
+ * @returns Filter config object.
+ * @example "buildLlamaGuardFilter('self_harm', 'hate')"
+ */
+function buildLlamaGuardFilter(...categories) {
+    return {
+        type: 'llama_guard_3_8b',
+        config: Object.fromEntries([...categories].map(category => [category, true]))
+    };
+}
+//# sourceMappingURL=filtering.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/module-config.js
+
+const module_config_logger = (0,util_dist.createLogger)({
+    package: 'orchestration',
+    messageContext: 'orchestration-utils'
+});
+/**
+ * @internal
+ */
+function constructCompletionPostRequestFromJsonModuleConfig(config, prompt, stream) {
+    const orchestration_config = { ...config };
+    if (stream) {
+        orchestration_config.stream = true;
+    }
+    else {
+        delete orchestration_config.stream;
+    }
+    return {
+        messages_history: prompt?.messagesHistory || [],
+        input_params: prompt?.inputParams || {},
+        orchestration_config
+    };
+}
+/**
+ * @internal
+ */
+function addStreamOptionsToLlmModuleConfig(llmModuleConfig, streamOptions) {
+    if (streamOptions?.llm === null) {
+        return llmModuleConfig;
+    }
+    return {
+        ...llmModuleConfig,
+        model_params: {
+            ...llmModuleConfig.model_params,
+            ...(streamOptions?.llm !== null && {
+                stream_options: {
+                    include_usage: true,
+                    ...(llmModuleConfig.model_params?.stream_options || {}),
+                    ...(streamOptions?.llm || {})
+                }
+            })
+        }
+    };
+}
+/**
+ * @internal
+ */
+function addStreamOptionsToOutputFilteringConfig(outputFilteringConfig, filteringStreamOptions) {
+    return {
+        ...outputFilteringConfig,
+        stream_options: {
+            ...(outputFilteringConfig.stream_options || {}),
+            ...filteringStreamOptions
+        }
+    };
+}
+/**
+ * @internal
+ */
+function addStreamOptions(moduleConfigs, streamOptions) {
+    const { llm_module_config, filtering_module_config } = moduleConfigs;
+    const outputFiltering = streamOptions?.outputFiltering;
+    const globalOptions = streamOptions?.global;
+    if (!moduleConfigs?.filtering_module_config?.output && outputFiltering) {
+        module_config_logger.warn('Output filter stream options are not applied because filtering module is not configured.');
+    }
+    return {
+        stream: true,
+        ...(globalOptions && { stream_options: globalOptions }),
+        module_configurations: {
+            ...moduleConfigs,
+            llm_module_config: addStreamOptionsToLlmModuleConfig(llm_module_config, streamOptions),
+            ...(outputFiltering &&
+                filtering_module_config?.output && {
+                filtering_module_config: {
+                    ...filtering_module_config,
+                    output: addStreamOptionsToOutputFilteringConfig(filtering_module_config.output, outputFiltering)
+                }
+            })
+        }
+    };
+}
+/**
+ * @internal
+ */
+function constructCompletionPostRequest(config, prompt, stream, streamOptions) {
+    // Templating is not a string here as it is already parsed in `parseAndMergeTemplating` method
+    const templatingConfig = { ...config.templating };
+    if (isTemplate(templatingConfig)) {
+        if (!templatingConfig.template?.length && !prompt?.messages?.length) {
+            throw new Error('Either a prompt template or messages must be defined.');
+        }
+        if (prompt?.messages?.length) {
+            templatingConfig.template = [
+                ...(templatingConfig.template || []),
+                ...prompt.messages
+            ];
+        }
+    }
+    const moduleConfigurations = {
+        templating_module_config: templatingConfig,
+        llm_module_config: config.llm,
+        ...(config?.filtering &&
+            Object.keys(config.filtering).length && {
+            filtering_module_config: config.filtering
+        }),
+        ...(config?.masking &&
+            Object.keys(config.masking).length && {
+            masking_module_config: config.masking
+        }),
+        ...(config?.grounding &&
+            Object.keys(config.grounding).length && {
+            grounding_module_config: config.grounding
+        }),
+        ...(config?.inputTranslation &&
+            Object.keys(config.inputTranslation).length && {
+            input_translation_module_config: config.inputTranslation
+        }),
+        ...(config?.outputTranslation &&
+            Object.keys(config.outputTranslation).length && {
+            output_translation_module_config: config.outputTranslation
+        })
+    };
+    return {
+        orchestration_config: stream
+            ? addStreamOptions(moduleConfigurations, mergeStreamOptions(config.streaming, streamOptions))
+            : { module_configurations: moduleConfigurations },
+        ...(prompt?.inputParams && {
+            input_params: prompt.inputParams
+        }),
+        ...(prompt?.messagesHistory && {
+            messages_history: prompt.messagesHistory
+        })
+    };
+}
+function mergeStreamOptions(globalOptions, streamOptions) {
+    return {
+        ...streamOptions,
+        ...((globalOptions || streamOptions?.global) && {
+            global: {
+                ...globalOptions,
+                ...streamOptions?.global
+            }
+        })
+    };
+}
+function isTemplate(templating) {
+    return (templating &&
+        typeof templating === 'object' &&
+        !('template_ref' in templating));
+}
+//# sourceMappingURL=module-config.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/stream.js
+
+const stream_logger = (0,util_dist.createLogger)({
+    package: 'orchestration',
+    messageContext: 'stream-util'
+});
+/**
+ * @internal
+ */
+function mergeStreamResponse(response, chunk) {
+    const data = response._data;
+    data.request_id = chunk.request_id;
+    data.module_results = mergeModuleResults(data.module_results, chunk.module_results);
+    data.orchestration_result = mergeLlmModule(data.orchestration_result, chunk.orchestration_result);
+}
+function mergeModuleResults(existing, incoming) {
+    const mergedModuleResults = { ...existing };
+    for (const [moduleName, moduleResult] of Object.entries(incoming || {})) {
+        switch (moduleName) {
+            case 'llm':
+                mergedModuleResults[moduleName] = mergeLlmModule(mergedModuleResults[moduleName], moduleResult);
+                break;
+            case 'output_unmasking':
+                mergedModuleResults[moduleName] = mergeLlmChoices(mergedModuleResults[moduleName], moduleResult);
+                break;
+            default:
+                mergedModuleResults[moduleName] = moduleResult;
+        }
+    }
+    return mergedModuleResults;
+}
+function mergeLlmModule(existing, incoming) {
+    if (!incoming) {
+        return existing;
+    }
+    const mergedModuleResults = {
+        ...incoming,
+        usage: mergeTokenUsage(existing?.usage, incoming.usage),
+        choices: mergeLlmChoices(existing?.choices, incoming?.choices)
+    };
+    return mergedModuleResults;
+}
+function mergeTokenUsage(existing, incoming) {
+    if (incoming) {
+        stream_logger.debug(`Token usage: ${JSON.stringify(incoming)}`);
+    }
+    return {
+        prompt_tokens: incoming?.prompt_tokens ?? existing?.prompt_tokens ?? 0,
+        completion_tokens: incoming?.completion_tokens ?? existing?.completion_tokens ?? 0,
+        total_tokens: incoming?.total_tokens ?? existing?.total_tokens ?? 0
+    };
+}
+function mergeLlmChoices(existing, incoming) {
+    const mergedChoices = [...(existing ?? [])];
+    for (const choice of incoming ?? []) {
+        const existingChoice = mergedChoices.find(c => c.index === choice.index);
+        if (existingChoice) {
+            // Merge existing choice with incoming choice
+            existingChoice.finish_reason = handleFinishReason(existingChoice.finish_reason, choice.finish_reason, choice.index);
+            existingChoice.logprobs = mergeLogProbs(existingChoice.logprobs, choice.logprobs);
+            existingChoice.message = mergeMessage(existingChoice.message, choice.delta);
+        }
+        else {
+            // Add new choice
+            mergedChoices.push(transformStreamingChoice(choice));
+        }
+    }
+    return mergedChoices;
+}
+function mergeMessage(existing, incoming) {
+    if (!incoming) {
+        return existing;
+    }
+    return {
+        role: existing.role,
+        content: existing.content + (incoming.content ?? ''),
+        tool_calls: mergeToolCalls(existing.tool_calls, incoming.tool_calls),
+        refusal: incoming.refusal ?? existing.refusal
+    };
+}
+function mergeToolCalls(existing, incoming) {
+    if (!incoming || incoming.length === 0) {
+        return existing;
+    }
+    if (!existing || existing.length === 0) {
+        return transformStreamingToolCalls(incoming);
+    }
+    const mergedToolCalls = [...existing];
+    for (const toolCall of incoming) {
+        const existingToolCall = mergedToolCalls.find(tc => tc.index === toolCall.index);
+        if (existingToolCall) {
+            // Merge existing tool call with incoming tool call
+            existingToolCall.function.name =
+                toolCall.function?.name ?? existingToolCall.function.name;
+            existingToolCall.function.arguments =
+                existingToolCall.function.arguments +
+                    (toolCall.function?.arguments ?? '');
+        }
+        else {
+            // Add new tool call
+            mergedToolCalls.push(transformStreamingToolCall(toolCall));
+        }
+    }
+    return mergedToolCalls;
+}
+function mergeLogProbs(existing, incoming) {
+    if (!incoming) {
+        return existing;
+    }
+    if (!existing) {
+        return incoming;
+    }
+    return {
+        content: [...(existing.content ?? []), ...(incoming.content ?? [])],
+        refusal: [...(existing.refusal ?? []), ...(incoming.refusal ?? [])]
+    };
+}
+function handleFinishReason(existing, incoming, choiceIndex) {
+    if (!incoming) {
+        return existing ?? '';
+    }
+    switch (incoming) {
+        case 'content_filter':
+            stream_logger.error(`Choice ${choiceIndex}: Stream finished with content filter hit.`);
+            break;
+        case 'length':
+            stream_logger.error(`Choice ${choiceIndex}: Stream finished with token length exceeded.`);
+            break;
+        case 'stop':
+        case 'tool_calls':
+        case 'function_call':
+            stream_logger.debug(`Choice ${choiceIndex}: Stream finished.`);
+            break;
+        default:
+            stream_logger.error(`Choice ${choiceIndex}: Stream finished with unknown reason '${incoming}'.`);
+    }
+    return incoming;
+}
+function transformStreamingChoice(choice) {
+    return {
+        index: choice.index,
+        message: {
+            role: 'assistant',
+            content: choice.delta.content,
+            tool_calls: transformStreamingToolCalls(choice.delta.tool_calls),
+            refusal: choice.delta.refusal
+        },
+        finish_reason: choice.finish_reason ?? '',
+        logprobs: choice.logprobs
+    };
+}
+function transformStreamingToolCalls(toolCalls) {
+    if (!toolCalls || toolCalls.length === 0) {
+        return undefined;
+    }
+    return toolCalls?.map(toolCall => transformStreamingToolCall(toolCall));
+}
+function transformStreamingToolCall(toolCall) {
+    return {
+        index: toolCall.index,
+        id: toolCall.id ?? '',
+        type: toolCall.type ?? 'function',
+        function: {
+            name: toolCall.function?.name ?? '',
+            arguments: toolCall.function?.arguments ?? ''
+        }
+    };
+}
+//# sourceMappingURL=stream.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/index.js
+
+
+
+
+
+
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream.js
+
+
+
+/**
+ * Orchestration stream containing post-processing functions.
+ */
+class OrchestrationStream extends SseStream {
+    iterator;
+    /**
+     * Create an orchestration stream based on the http response.
+     * @param response - Http response.
+     * @returns An orchestration stream.
+     * @internal
+     */
+    static _create(response, controller) {
+        const stream = SseStream.transformToSseStream(response, controller);
+        return new OrchestrationStream(stream.iterator, controller);
+    }
+    /**
+     * Wrap raw chunk data with chunk response class to provide helper functions.
+     * @param stream - Orchestration stream.
+     * @internal
+     */
+    static async *_processChunk(stream) {
+        for await (const chunk of stream) {
+            yield new OrchestrationStreamChunkResponse(chunk);
+        }
+    }
+    static async *_processOrchestrationStreamChunkResponse(stream, response) {
+        if (!response) {
+            throw new Error('Response is required to process completion post response streaming.');
+        }
+        for await (const chunk of stream) {
+            mergeStreamResponse(response, chunk.data);
+            yield chunk;
+        }
+    }
+    static async *_processStreamEnd(stream, response) {
+        if (!response) {
+            throw new Error('Response is required to process stream end.');
+        }
+        for await (const chunk of stream) {
+            yield chunk;
+        }
+        response._openStream = false;
+    }
+    /**
+     * Transform a stream of chunks into a stream of content strings.
+     * @param stream - Orchestration stream.
+     * @param choiceIndex - The index of the choice to parse.
+     * @internal
+     */
+    static async *_processContentStream(stream) {
+        for await (const chunk of stream) {
+            const deltaContent = chunk.getDeltaContent();
+            if (!deltaContent) {
+                continue;
+            }
+            yield deltaContent;
+        }
+    }
+    constructor(iterator, controller) {
+        super(iterator, controller);
+        this.iterator = iterator;
+    }
+    /**
+     * Pipe the stream through a processing function.
+     * @param processFn - The function to process the input stream.
+     * @param response - The `OrchestrationStreamResponse` object for process function to store finish reason, token usage, etc.
+     * @returns The output stream containing processed items.
+     * @internal
+     */
+    _pipe(processFn, response) {
+        if (response) {
+            return new OrchestrationStream(() => processFn(this, response), this.controller);
+        }
+        return new OrchestrationStream(() => processFn(this), this.controller);
+    }
+    /**
+     * Transform the stream of chunks into a stream of content strings.
+     * @param this - Orchestration stream.
+     * @returns A stream of content strings.
+     */
+    toContentStream() {
+        return new OrchestrationStream(() => OrchestrationStream._processContentStream(this), this.controller);
+    }
+}
+//# sourceMappingURL=orchestration-stream.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/artifact-api.js
 /*
  * Copyright (c) 2025 SAP SE or an SAP affiliate company. All rights reserved.
@@ -109507,227 +110038,744 @@ const coerce = {
 
 const types_NEVER = (/* unused pure expression or super */ null && (INVALID));
 
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/single-chat-template.zod.js
-// Generated by ts-to-zod
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/prompt-registry.zod.js
+/**
+ * Generated by orval v7.10.0 🍺
+ * Do not edit manually.
+ * Prompt Registry API
+ * Prompt Storage service for Design time & Runtime prompt templates.
+ * OpenAPI spec version: 0.0.1.
+ */
 
 /**
- * @internal
- **/
-const singleChatTemplateSchema = objectType({
-    role: stringType(),
-    content: stringType()
-});
-//# sourceMappingURL=single-chat-template.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/image-content.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const imageContentSchema = objectType({
-    type: literalType('image_url'),
-    image_url: objectType({
-        url: stringType(),
-        detail: stringType().optional()
-    })
-})
-    .and(recordType(anyType()));
-//# sourceMappingURL=image-content.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/text-content.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const textContentSchema = objectType({
-    type: literalType('text'),
-    text: stringType()
-});
-//# sourceMappingURL=text-content.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/multi-chat-content.zod.js
-// Generated by ts-to-zod
-
-
-
-/**
- * @internal
- **/
-const multiChatContentSchema = unionType([
-    imageContentSchema,
-    textContentSchema
-]);
-//# sourceMappingURL=multi-chat-content.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/multi-chat-template.zod.js
-// Generated by ts-to-zod
-
-
-/**
- * @internal
- **/
-const multiChatTemplateSchema = objectType({
-    role: stringType(),
-    content: arrayType(multiChatContentSchema)
-});
-//# sourceMappingURL=multi-chat-template.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/template.zod.js
-// Generated by ts-to-zod
-
-
-
-/**
- * @internal
- **/
-const templateSchema = unionType([
-    singleChatTemplateSchema,
-    multiChatTemplateSchema
-]);
-//# sourceMappingURL=template.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/response-format-text.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const responseFormatTextSchema = objectType({
-    type: literalType('text')
-});
-//# sourceMappingURL=response-format-text.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/response-format-json-object.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const responseFormatJsonObjectSchema = objectType({
-    type: literalType('json_object')
-});
-//# sourceMappingURL=response-format-json-object.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/response-format-json-schema-schema.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const responseFormatJsonSchemaSchemaSchema = recordType(anyType());
-//# sourceMappingURL=response-format-json-schema-schema.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/response-format-json-schema.zod.js
-// Generated by ts-to-zod
-
-
-/**
- * @internal
- **/
-const responseFormatJsonSchemaSchema = objectType({
-    type: literalType('json_schema'),
-    json_schema: objectType({
-        description: stringType().optional(),
-        name: stringType(),
-        schema: responseFormatJsonSchemaSchemaSchema.optional(),
-        strict: booleanType().optional().nullable()
+ * Create or update a prompt template.
+ */
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameMax = 120;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionMax = 10;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioMax = 120;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerCreateUpdatePromptTemplateBody = objectType({
+    name: stringType()
+        .max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameMax),
+    version: stringType()
+        .max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionMax),
+    scenario: stringType()
+        .max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioMax),
+    spec: objectType({
+        template: arrayType(objectType({
+            role: stringType(),
+            content: stringType()
+        })
+            .or(objectType({
+            role: stringType(),
+            content: arrayType(objectType({
+                type: enumType(['image_url']),
+                image_url: objectType({
+                    url: stringType(),
+                    detail: stringType()
+                        .default(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecTemplateItemContentItemImageUrlDetailDefault)
+                })
+            })
+                .or(objectType({
+                type: enumType(['text']),
+                text: stringType()
+            })))
+        }))),
+        defaults: objectType({}).optional(),
+        additionalFields: objectType({})
+            .optional()
+            .describe('DEPRECATED. Please use additional_fields instead.\n'),
+        response_format: objectType({
+            type: enumType(['text'])
+                .describe('The type of response format being defined: `text`')
+        })
+            .or(objectType({
+            type: enumType(['json_object'])
+                .describe('The type of response format being defined: `json_object`')
+        }))
+            .or(objectType({
+            type: enumType(['json_schema'])
+                .describe('The type of response format being defined: `json_schema`'),
+            json_schema: objectType({
+                description: stringType()
+                    .optional()
+                    .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                name: stringType()
+                    .max(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatJsonSchemaNameMax)
+                    .regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatJsonSchemaNameRegExp)
+                    .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                schema: recordType(stringType(), anyType())
+                    .optional()
+                    .describe('The schema for the response format, described as a JSON Schema object.'),
+                strict: booleanType()
+                    .nullish()
+                    .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+            })
+        }))
+            .optional()
+            .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+        tools: arrayType(objectType({
+            type: enumType(['function'])
+                .describe('The type of the tool. Currently, only `function` is supported.'),
+            function: objectType({
+                description: stringType()
+                    .optional()
+                    .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                name: stringType()
+                    .max(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameMax)
+                    .regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameRegExp)
+                    .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                parameters: recordType(stringType(), anyType())
+                    .optional()
+                    .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                strict: booleanType()
+                    .nullish()
+                    .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+            })
+        }))
+            .optional()
+            .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
     })
 });
-//# sourceMappingURL=response-format-json-schema.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/function-parameters.zod.js
-// Generated by ts-to-zod
-
-/**
- * @internal
- **/
-const functionParametersSchema = recordType(anyType());
-//# sourceMappingURL=function-parameters.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/function-object.zod.js
-// Generated by ts-to-zod
-
-
-/**
- * @internal
- **/
-const functionObjectSchema = objectType({
-    description: stringType().optional(),
-    name: stringType(),
-    parameters: functionParametersSchema.optional(),
-    strict: booleanType().optional().nullable()
-});
-//# sourceMappingURL=function-object.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/chat-completion-tool.zod.js
-// Generated by ts-to-zod
-
-
-/**
- * @internal
- **/
-const chatCompletionToolSchema = objectType({
-    type: literalType('function'),
-    function: functionObjectSchema
-});
-//# sourceMappingURL=chat-completion-tool.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/prompt-template-spec.zod.js
-// Generated by ts-to-zod
-
-
-
-
-
-
-/**
- * @internal
- **/
-const promptTemplateSpecSchema = objectType({
-    template: arrayType(templateSchema),
-    defaults: recordType(anyType()).optional(),
-    additionalFields: recordType(anyType()).optional(),
-    response_format: unionType([
-        responseFormatTextSchema,
-        responseFormatJsonObjectSchema,
-        responseFormatJsonSchemaSchema
-    ])
-        .optional(),
-    tools: arrayType(chatCompletionToolSchema).optional()
-})
-    .passthrough();
-//# sourceMappingURL=prompt-template-spec.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/prompt-template-post-request.zod.js
-// Generated by ts-to-zod
-
-
-const promptTemplatePostRequestSchema = objectType({
-    name: stringType(),
-    version: stringType(),
+const registryControllerPromptControllerCreateUpdatePromptTemplateResponse = objectType({
+    message: stringType(),
+    id: stringType().uuid(),
     scenario: stringType(),
-    spec: promptTemplateSpecSchema
-})
-    .and(recordType(anyType()));
-//# sourceMappingURL=prompt-template-post-request.zod.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/index.js
-
-// eslint-disable-next-line import/no-internal-modules
+    name: stringType(),
+    version: stringType()
+});
+/**
+ * List prompt templates.
+ */
+const registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault = 'both';
+const registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault = false;
+const registryControllerPromptControllerListPromptTemplatesQueryParams = objectType({
+    scenario: stringType().optional(),
+    name: stringType().optional(),
+    version: stringType().optional(),
+    retrieve: stringType()
+        .default(registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault),
+    includeSpec: booleanType().optional()
+});
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerListPromptTemplatesResponse = objectType({
+    count: numberType(),
+    resources: arrayType(objectType({
+        id: stringType().uuid().optional(),
+        name: stringType().optional(),
+        version: stringType().optional(),
+        scenario: stringType().optional(),
+        creationTimestamp: stringType().optional(),
+        managedBy: stringType().optional(),
+        isVersionHead: booleanType().optional(),
+        spec: objectType({
+            template: arrayType(objectType({
+                role: stringType(),
+                content: stringType()
+            })
+                .or(objectType({
+                role: stringType(),
+                content: arrayType(objectType({
+                    type: enumType(['image_url']),
+                    image_url: objectType({
+                        url: stringType(),
+                        detail: stringType()
+                            .default(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecTemplateItemContentItemImageUrlDetailDefault)
+                    })
+                })
+                    .or(objectType({
+                    type: enumType(['text']),
+                    text: stringType()
+                })))
+            }))),
+            defaults: objectType({}).optional(),
+            additionalFields: objectType({})
+                .optional()
+                .describe('DEPRECATED. Please use additional_fields instead.\n'),
+            response_format: objectType({
+                type: enumType(['text'])
+                    .describe('The type of response format being defined: `text`')
+            })
+                .or(objectType({
+                type: enumType(['json_object'])
+                    .describe('The type of response format being defined: `json_object`')
+            }))
+                .or(objectType({
+                type: enumType(['json_schema'])
+                    .describe('The type of response format being defined: `json_schema`'),
+                json_schema: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatJsonSchemaNameMax)
+                        .regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatJsonSchemaNameRegExp)
+                        .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    schema: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The schema for the response format, described as a JSON Schema object.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+                })
+            }))
+                .optional()
+                .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+            tools: arrayType(objectType({
+                type: enumType(['function'])
+                    .describe('The type of the tool. Currently, only `function` is supported.'),
+                function: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameMax)
+                        .regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameRegExp)
+                        .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    parameters: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+                })
+            }))
+                .optional()
+                .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
+        })
+            .optional()
+    }))
+});
+/**
+ * List prompt template history.
+ */
+const registryControllerPromptControllerListPromptTemplateHistoryParams = objectType({
+    scenario: stringType(),
+    version: stringType(),
+    name: stringType()
+});
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerListPromptTemplateHistoryResponse = objectType({
+    count: numberType(),
+    resources: arrayType(objectType({
+        id: stringType().uuid().optional(),
+        name: stringType().optional(),
+        version: stringType().optional(),
+        scenario: stringType().optional(),
+        creationTimestamp: stringType().optional(),
+        managedBy: stringType().optional(),
+        isVersionHead: booleanType().optional(),
+        spec: objectType({
+            template: arrayType(objectType({
+                role: stringType(),
+                content: stringType()
+            })
+                .or(objectType({
+                role: stringType(),
+                content: arrayType(objectType({
+                    type: enumType(['image_url']),
+                    image_url: objectType({
+                        url: stringType(),
+                        detail: stringType()
+                            .default(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecTemplateItemContentItemImageUrlDetailDefault)
+                    })
+                })
+                    .or(objectType({
+                    type: enumType(['text']),
+                    text: stringType()
+                })))
+            }))),
+            defaults: objectType({}).optional(),
+            additionalFields: objectType({})
+                .optional()
+                .describe('DEPRECATED. Please use additional_fields instead.\n'),
+            response_format: objectType({
+                type: enumType(['text'])
+                    .describe('The type of response format being defined: `text`')
+            })
+                .or(objectType({
+                type: enumType(['json_object'])
+                    .describe('The type of response format being defined: `json_object`')
+            }))
+                .or(objectType({
+                type: enumType(['json_schema'])
+                    .describe('The type of response format being defined: `json_schema`'),
+                json_schema: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatJsonSchemaNameMax)
+                        .regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatJsonSchemaNameRegExp)
+                        .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    schema: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The schema for the response format, described as a JSON Schema object.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+                })
+            }))
+                .optional()
+                .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+            tools: arrayType(objectType({
+                type: enumType(['function'])
+                    .describe('The type of the tool. Currently, only `function` is supported.'),
+                function: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameMax)
+                        .regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameRegExp)
+                        .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    parameters: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+                })
+            }))
+                .optional()
+                .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
+        })
+            .optional()
+    }))
+});
+/**
+ * Get prompt template by UUID.
+ */
+const registryControllerPromptControllerGetPromptTemplateByUuidParams = objectType({
+    promptTemplateId: stringType().uuid()
+});
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerGetPromptTemplateByUuidResponse = objectType({
+    id: stringType().uuid().optional(),
+    name: stringType().optional(),
+    version: stringType().optional(),
+    scenario: stringType().optional(),
+    creationTimestamp: stringType().optional(),
+    managedBy: stringType().optional(),
+    isVersionHead: booleanType().optional(),
+    spec: objectType({
+        template: arrayType(objectType({
+            role: stringType(),
+            content: stringType()
+        })
+            .or(objectType({
+            role: stringType(),
+            content: arrayType(objectType({
+                type: enumType(['image_url']),
+                image_url: objectType({
+                    url: stringType(),
+                    detail: stringType()
+                        .default(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecTemplateItemContentItemImageUrlDetailDefault)
+                })
+            })
+                .or(objectType({
+                type: enumType(['text']),
+                text: stringType()
+            })))
+        }))),
+        defaults: objectType({}).optional(),
+        additionalFields: objectType({})
+            .optional()
+            .describe('DEPRECATED. Please use additional_fields instead.\n'),
+        response_format: objectType({
+            type: enumType(['text'])
+                .describe('The type of response format being defined: `text`')
+        })
+            .or(objectType({
+            type: enumType(['json_object'])
+                .describe('The type of response format being defined: `json_object`')
+        }))
+            .or(objectType({
+            type: enumType(['json_schema'])
+                .describe('The type of response format being defined: `json_schema`'),
+            json_schema: objectType({
+                description: stringType()
+                    .optional()
+                    .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                name: stringType()
+                    .max(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatJsonSchemaNameMax)
+                    .regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatJsonSchemaNameRegExp)
+                    .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                schema: recordType(stringType(), anyType())
+                    .optional()
+                    .describe('The schema for the response format, described as a JSON Schema object.'),
+                strict: booleanType()
+                    .nullish()
+                    .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+            })
+        }))
+            .optional()
+            .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+        tools: arrayType(objectType({
+            type: enumType(['function'])
+                .describe('The type of the tool. Currently, only `function` is supported.'),
+            function: objectType({
+                description: stringType()
+                    .optional()
+                    .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                name: stringType()
+                    .max(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameMax)
+                    .regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameRegExp)
+                    .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                parameters: recordType(stringType(), anyType())
+                    .optional()
+                    .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                strict: booleanType()
+                    .nullish()
+                    .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+            })
+        }))
+            .optional()
+            .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
+    })
+        .optional()
+});
+/**
+ * Delete prompt template.
+ */
+const registryControllerPromptControllerDeletePromptTemplateParams = objectType({
+    promptTemplateId: stringType().uuid()
+});
+const registryControllerPromptControllerDeletePromptTemplateResponse = objectType({
+    message: stringType()
+});
+/**
+ * Import prompt template.
+ */
+const registryControllerPromptControllerImportPromptTemplateBody = objectType({
+    file: instanceOfType(File).optional()
+});
+const registryControllerPromptControllerImportPromptTemplateResponse = objectType({
+    message: stringType(),
+    id: stringType().uuid(),
+    scenario: stringType(),
+    name: stringType(),
+    version: stringType()
+});
+/**
+ * Export prompt template.
+ */
+const registryControllerPromptControllerExportPromptTemplateParams = objectType({
+    promptTemplateId: stringType().uuid()
+});
+/**
+ * Parse prompt template by ID.
+ */
+const registryControllerPromptControllerParsePromptTemplateByIdParams = objectType({
+    promptTemplateId: stringType().uuid()
+});
+const registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByIdQueryParams = objectType({
+    metadata: booleanType().optional()
+});
+const registryControllerPromptControllerParsePromptTemplateByIdBody = objectType({
+    inputParams: objectType({}).optional()
+});
+const registryControllerPromptControllerParsePromptTemplateByIdResponseParsedPromptItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByIdResponse = objectType({
+    parsedPrompt: arrayType(objectType({
+        role: stringType(),
+        content: stringType()
+    })
+        .or(objectType({
+        role: stringType(),
+        content: arrayType(objectType({
+            type: enumType(['image_url']),
+            image_url: objectType({
+                url: stringType(),
+                detail: stringType()
+                    .default(registryControllerPromptControllerParsePromptTemplateByIdResponseParsedPromptItemContentItemImageUrlDetailDefault)
+            })
+        })
+            .or(objectType({
+            type: enumType(['text']),
+            text: stringType()
+        })))
+    })))
+        .optional(),
+    resource: objectType({
+        id: stringType().uuid().optional(),
+        name: stringType().optional(),
+        version: stringType().optional(),
+        scenario: stringType().optional(),
+        creationTimestamp: stringType().optional(),
+        managedBy: stringType().optional(),
+        isVersionHead: booleanType().optional(),
+        spec: objectType({
+            template: arrayType(objectType({
+                role: stringType(),
+                content: stringType()
+            })
+                .or(objectType({
+                role: stringType(),
+                content: arrayType(objectType({
+                    type: enumType(['image_url']),
+                    image_url: objectType({
+                        url: stringType(),
+                        detail: stringType()
+                            .default(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecTemplateItemContentItemImageUrlDetailDefault)
+                    })
+                })
+                    .or(objectType({
+                    type: enumType(['text']),
+                    text: stringType()
+                })))
+            }))),
+            defaults: objectType({}).optional(),
+            additionalFields: objectType({})
+                .optional()
+                .describe('DEPRECATED. Please use additional_fields instead.\n'),
+            response_format: objectType({
+                type: enumType(['text'])
+                    .describe('The type of response format being defined: `text`')
+            })
+                .or(objectType({
+                type: enumType(['json_object'])
+                    .describe('The type of response format being defined: `json_object`')
+            }))
+                .or(objectType({
+                type: enumType(['json_schema'])
+                    .describe('The type of response format being defined: `json_schema`'),
+                json_schema: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatJsonSchemaNameMax)
+                        .regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatJsonSchemaNameRegExp)
+                        .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    schema: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The schema for the response format, described as a JSON Schema object.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+                })
+            }))
+                .optional()
+                .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+            tools: arrayType(objectType({
+                type: enumType(['function'])
+                    .describe('The type of the tool. Currently, only `function` is supported.'),
+                function: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameMax)
+                        .regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameRegExp)
+                        .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    parameters: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+                })
+            }))
+                .optional()
+                .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
+        })
+            .optional()
+    })
+        .optional()
+});
+/**
+ * Parse prompt template by name and version.
+ */
+const registryControllerPromptControllerParsePromptTemplateByNameVersionParams = objectType({
+    scenario: stringType(),
+    version: stringType(),
+    name: stringType()
+});
+const registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByNameVersionQueryParams = objectType({
+    metadata: booleanType().optional()
+});
+const registryControllerPromptControllerParsePromptTemplateByNameVersionBody = objectType({
+    inputParams: objectType({}).optional()
+});
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseParsedPromptItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecTemplateItemContentItemImageUrlDetailDefault = 'auto';
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatJsonSchemaNameMax = 64;
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatJsonSchemaNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatJsonSchemaStrictDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameMax = 64;
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionStrictDefault = false;
+const registryControllerPromptControllerParsePromptTemplateByNameVersionResponse = objectType({
+    parsedPrompt: arrayType(objectType({
+        role: stringType(),
+        content: stringType()
+    })
+        .or(objectType({
+        role: stringType(),
+        content: arrayType(objectType({
+            type: enumType(['image_url']),
+            image_url: objectType({
+                url: stringType(),
+                detail: stringType()
+                    .default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseParsedPromptItemContentItemImageUrlDetailDefault)
+            })
+        })
+            .or(objectType({
+            type: enumType(['text']),
+            text: stringType()
+        })))
+    })))
+        .optional(),
+    resource: objectType({
+        id: stringType().uuid().optional(),
+        name: stringType().optional(),
+        version: stringType().optional(),
+        scenario: stringType().optional(),
+        creationTimestamp: stringType().optional(),
+        managedBy: stringType().optional(),
+        isVersionHead: booleanType().optional(),
+        spec: objectType({
+            template: arrayType(objectType({
+                role: stringType(),
+                content: stringType()
+            })
+                .or(objectType({
+                role: stringType(),
+                content: arrayType(objectType({
+                    type: enumType(['image_url']),
+                    image_url: objectType({
+                        url: stringType(),
+                        detail: stringType()
+                            .default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecTemplateItemContentItemImageUrlDetailDefault)
+                    })
+                })
+                    .or(objectType({
+                    type: enumType(['text']),
+                    text: stringType()
+                })))
+            }))),
+            defaults: objectType({}).optional(),
+            additionalFields: objectType({})
+                .optional()
+                .describe('DEPRECATED. Please use additional_fields instead.\n'),
+            response_format: objectType({
+                type: enumType(['text'])
+                    .describe('The type of response format being defined: `text`')
+            })
+                .or(objectType({
+                type: enumType(['json_object'])
+                    .describe('The type of response format being defined: `json_object`')
+            }))
+                .or(objectType({
+                type: enumType(['json_schema'])
+                    .describe('The type of response format being defined: `json_schema`'),
+                json_schema: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatJsonSchemaNameMax)
+                        .regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatJsonSchemaNameRegExp)
+                        .describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    schema: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The schema for the response format, described as a JSON Schema object.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).')
+                })
+            }))
+                .optional()
+                .describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
+            tools: arrayType(objectType({
+                type: enumType(['function'])
+                    .describe('The type of the tool. Currently, only `function` is supported.'),
+                function: objectType({
+                    description: stringType()
+                        .optional()
+                        .describe('A description of what the function does, used by the model to choose when and how to call the function.'),
+                    name: stringType()
+                        .max(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameMax)
+                        .regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameRegExp)
+                        .describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
+                    parameters: recordType(stringType(), anyType())
+                        .optional()
+                        .describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
+                    strict: booleanType()
+                        .nullish()
+                        .describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).')
+                })
+            }))
+                .optional()
+                .describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
+        })
+            .optional()
+    })
+        .optional()
+});
+//# sourceMappingURL=prompt-registry.zod.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/index.js
 
 //# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/internal.js
+
+
+//# sourceMappingURL=internal.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/internal.js
+
+//# sourceMappingURL=internal.js.map
+
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream-response.js
 /**
  * Orchestration stream response.
  */
 class OrchestrationStreamResponse {
-    _usage;
-    /**
-     * Finish reasons for all choices.
-     */
-    _finishReasons = new Map();
-    _toolCallsAccumulators = new Map();
+    _openStream = true;
+    _data = {};
     _stream;
-    _toolCalls = new Map();
     /**
      * Gets the token usage for the response.
      * @returns The token usage for the response.
      */
     getTokenUsage() {
-        return this._usage;
-    }
-    /**
-     * @internal
-     */
-    _setTokenUsage(usage) {
-        this._usage = usage;
+        if (this.isStreamOpen()) {
+            return;
+        }
+        return this._data.orchestration_result?.usage;
     }
     /**
      * Gets the finish reason for a specific choice index.
@@ -109735,45 +110783,95 @@ class OrchestrationStreamResponse {
      * @returns The finish reason for the specified choice index.
      */
     getFinishReason(choiceIndex = 0) {
-        return this._finishReasons.get(choiceIndex);
+        if (this.isStreamOpen()) {
+            return;
+        }
+        return this.findChoiceByIndex(choiceIndex)?.finish_reason;
     }
     /**
-     * @internal
+     * Parses the orchestration response and returns the content.
+     * If the response was filtered, an error is thrown.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The message content.
      */
-    _getFinishReasons() {
-        return this._finishReasons;
+    getContent(choiceIndex = 0) {
+        if (this.isStreamOpen()) {
+            return;
+        }
+        const choice = this.findChoiceByIndex(choiceIndex);
+        return choice?.message?.content;
     }
     /**
-     * @internal
-     */
-    _setFinishReasons(finishReasons) {
-        this._finishReasons = finishReasons;
-    }
-    /**
-     * Gets the tool calls for a specific choice index.
-     * @param choiceIndex - The index of the choice to get the tool calls for.
-     * @returns The tool calls for the specified choice index.
+     * Parses the orchestration response and returns the tool calls generated by the model.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The message tool calls.
      */
     getToolCalls(choiceIndex = 0) {
-        return this._toolCalls.get(choiceIndex);
+        if (this.isStreamOpen()) {
+            return;
+        }
+        const choice = this.findChoiceByIndex(choiceIndex);
+        return choice?.message?.tool_calls;
     }
     /**
-     * @internal
+     * Parses the orchestration response and returns the refusal message generated by the model.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns The refusal string.
      */
-    _setToolCalls(choiceIndex, toolCalls) {
-        this._toolCalls.set(choiceIndex, toolCalls);
+    getRefusal(choiceIndex = 0) {
+        if (this.isStreamOpen()) {
+            return;
+        }
+        const choice = this.findChoiceByIndex(choiceIndex);
+        return choice?.message?.refusal;
     }
     /**
-     * @internal
+     * Messages that can be used for subsequent prompts as message history.
+     * @param choiceIndex - The index of the choice to parse.
+     * @returns A list of all messages.
      */
-    _getToolCallsAccumulators() {
-        return this._toolCallsAccumulators;
+    getAllMessages(choiceIndex = 0) {
+        if (this.isStreamOpen()) {
+            return;
+        }
+        const messages = this._data.module_results?.templating ?? [];
+        const content = this.findChoiceByIndex(choiceIndex)?.message;
+        return content ? [...messages, content] : messages;
+    }
+    /**
+     * Gets the assistant message from the response.
+     * @param choiceIndex - The index of the choice to use (default is 0).
+     * @returns The assistant message.
+     */
+    getAssistantMessage(choiceIndex = 0) {
+        if (this.isStreamOpen()) {
+            return;
+        }
+        return this.findChoiceByIndex(choiceIndex)?.message;
+    }
+    getResponse() {
+        if (this.isStreamOpen()) {
+            return;
+        }
+        return this._data;
     }
     get stream() {
         if (!this._stream) {
             throw new Error('Response stream is undefined.');
         }
         return this._stream;
+    }
+    getChoices() {
+        return this._data.orchestration_result?.choices ?? [];
+    }
+    findChoiceByIndex(index) {
+        return this.getChoices().find((c) => c.index === index);
+    }
+    isStreamOpen() {
+        if (this._openStream) {
+            throw Error('The stream is still open, the requested data is not available yet. Please wait until the stream is closed.');
+        }
+        return this._openStream;
     }
     /**
      * @internal
@@ -109862,295 +110960,19 @@ class OrchestrationResponse {
     getAssistantMessage(choiceIndex = 0) {
         return this.findChoiceByIndex(choiceIndex)?.message;
     }
+    /**
+     * Parses the response and returns the choice by index.
+     * @param index - The index of the choice to find.
+     * @returns An {@link LLMChoice} object associated with the index.
+     */
+    findChoiceByIndex(index) {
+        return this.getChoices().find((c) => c.index === index);
+    }
     getChoices() {
         return this.data.orchestration_result.choices;
     }
-    findChoiceByIndex(index) {
-        // TODO: replace cast with LLMChoice[] after the bug in orchestration, where
-        // 'role' in ResponseChatMessage is optional when it should be mandatory, is fixed.
-        // https://github.com/SAP/ai-sdk-js-backlog/issues/306
-        return this.getChoices().find((c) => c.index === index);
-    }
 }
 //# sourceMappingURL=orchestration-response.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-types.js
-/**
- * A descriptive constant for Azure content safety filter threshold.
- * @internal
- */
-const orchestration_types_supportedAzureFilterThresholds = {
-    ALLOW_SAFE: 0,
-    ALLOW_SAFE_LOW: 2,
-    ALLOW_SAFE_LOW_MEDIUM: 4,
-    ALLOW_ALL: 6
-};
-//# sourceMappingURL=orchestration-types.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/filtering.js
-
-/**
- * Convenience function to build Azure content filter.
- * @param filter - Filtering configuration for Azure filter. If skipped, the default Azure content filter configuration is used.
- * @returns An object with the Azure filtering configuration.
- * @deprecated Since 1.8.0. Use {@link buildAzureContentSafetyFilter()} instead.
- */
-function buildAzureContentFilter(filter) {
-    if (filter && !Object.keys(filter).length) {
-        throw new Error('Filter property cannot be an empty object');
-    }
-    return {
-        filters: [
-            {
-                type: 'azure_content_safety',
-                ...(filter && { config: filter })
-            }
-        ]
-    };
-}
-/**
- * Convenience function to build Azure content filter.
- * @param config - Configuration for Azure content safety filter.
- * If skipped, the default configuration of `ALLOW_SAFE_LOW` is used for all filter categories.
- * @returns Filter config object.
- * @example "buildAzureContentSafetyFilter({ Hate: 'ALLOW_SAFE', Violence: 'ALLOW_SAFE_LOW_MEDIUM' })"
- */
-function buildAzureContentSafetyFilter(config) {
-    if (config && !Object.keys(config).length) {
-        throw new Error('Filtering configuration cannot be an empty object');
-    }
-    return {
-        type: 'azure_content_safety',
-        ...(config && {
-            config: {
-                ...Object.fromEntries(Object.entries(config).map(([key, value]) => [
-                    key,
-                    supportedAzureFilterThresholds[value]
-                ]))
-            }
-        })
-    };
-}
-/**
- * Convenience function to build Llama guard filter.
- * @param categories - Categories to be enabled for filtering. Provide at least one category.
- * @returns Filter config object.
- * @example "buildLlamaGuardFilter('self_harm', 'hate')"
- */
-function buildLlamaGuardFilter(...categories) {
-    return {
-        type: 'llama_guard_3_8b',
-        config: Object.fromEntries([...categories].map(category => [category, true]))
-    };
-}
-//# sourceMappingURL=filtering.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/module-config.js
-
-const module_config_logger = (0,util_dist.createLogger)({
-    package: 'orchestration',
-    messageContext: 'orchestration-utils'
-});
-/**
- * @internal
- */
-function constructCompletionPostRequestFromJsonModuleConfig(config, prompt, stream) {
-    const orchestration_config = { ...config };
-    if (stream) {
-        orchestration_config.stream = true;
-    }
-    else {
-        delete orchestration_config.stream;
-    }
-    return {
-        messages_history: prompt?.messagesHistory || [],
-        input_params: prompt?.inputParams || {},
-        orchestration_config
-    };
-}
-/**
- * @internal
- */
-function addStreamOptionsToLlmModuleConfig(llmModuleConfig, streamOptions) {
-    if (streamOptions?.llm === null) {
-        return llmModuleConfig;
-    }
-    return {
-        ...llmModuleConfig,
-        model_params: {
-            ...llmModuleConfig.model_params,
-            ...(streamOptions?.llm !== null && {
-                stream_options: {
-                    include_usage: true,
-                    ...(llmModuleConfig.model_params?.stream_options || {}),
-                    ...(streamOptions?.llm || {})
-                }
-            })
-        }
-    };
-}
-/**
- * @internal
- */
-function addStreamOptionsToOutputFilteringConfig(outputFilteringConfig, filteringStreamOptions) {
-    return {
-        ...outputFilteringConfig,
-        stream_options: {
-            ...(outputFilteringConfig.stream_options || {}),
-            ...filteringStreamOptions
-        }
-    };
-}
-/**
- * @internal
- */
-function addStreamOptions(moduleConfigs, streamOptions) {
-    const { llm_module_config, filtering_module_config } = moduleConfigs;
-    const outputFiltering = streamOptions?.outputFiltering;
-    const globalOptions = streamOptions?.global;
-    if (!moduleConfigs?.filtering_module_config?.output && outputFiltering) {
-        module_config_logger.warn('Output filter stream options are not applied because filtering module is not configured.');
-    }
-    return {
-        stream: true,
-        ...(globalOptions && { stream_options: globalOptions }),
-        module_configurations: {
-            ...moduleConfigs,
-            llm_module_config: addStreamOptionsToLlmModuleConfig(llm_module_config, streamOptions),
-            ...(outputFiltering &&
-                filtering_module_config?.output && {
-                filtering_module_config: {
-                    ...filtering_module_config,
-                    output: addStreamOptionsToOutputFilteringConfig(filtering_module_config.output, outputFiltering)
-                }
-            })
-        }
-    };
-}
-/**
- * @internal
- */
-function constructCompletionPostRequest(config, prompt, stream, streamOptions) {
-    // Templating is not a string here as it is already parsed in `parseAndMergeTemplating` method
-    const templatingConfig = { ...config.templating };
-    if (isTemplate(templatingConfig)) {
-        if (!templatingConfig.template?.length && !prompt?.messages?.length) {
-            throw new Error('Either a prompt template or messages must be defined.');
-        }
-        if (prompt?.messages?.length) {
-            templatingConfig.template = [
-                ...(templatingConfig.template || []),
-                ...prompt.messages
-            ];
-        }
-    }
-    const moduleConfigurations = {
-        templating_module_config: templatingConfig,
-        llm_module_config: config.llm,
-        ...(config?.filtering &&
-            Object.keys(config.filtering).length && {
-            filtering_module_config: config.filtering
-        }),
-        ...(config?.masking &&
-            Object.keys(config.masking).length && {
-            masking_module_config: config.masking
-        }),
-        ...(config?.grounding &&
-            Object.keys(config.grounding).length && {
-            grounding_module_config: config.grounding
-        }),
-        ...(config?.inputTranslation &&
-            Object.keys(config.inputTranslation).length && {
-            input_translation_module_config: config.inputTranslation
-        }),
-        ...(config?.outputTranslation &&
-            Object.keys(config.outputTranslation).length && {
-            output_translation_module_config: config.outputTranslation
-        })
-    };
-    return {
-        orchestration_config: stream
-            ? addStreamOptions(moduleConfigurations, mergeStreamOptions(config.streaming, streamOptions))
-            : { module_configurations: moduleConfigurations },
-        ...(prompt?.inputParams && {
-            input_params: prompt.inputParams
-        }),
-        ...(prompt?.messagesHistory && {
-            messages_history: prompt.messagesHistory
-        })
-    };
-}
-function mergeStreamOptions(globalOptions, streamOptions) {
-    return {
-        ...streamOptions,
-        ...((globalOptions || streamOptions?.global) && {
-            global: {
-                ...globalOptions,
-                ...streamOptions?.global
-            }
-        })
-    };
-}
-function isTemplate(templating) {
-    return (templating &&
-        typeof templating === 'object' &&
-        !('template_ref' in templating));
-}
-//# sourceMappingURL=module-config.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/tool-calls.js
-/**
- * @internal
- * Check if the accumulator is a MessageToolCall.
- */
-function isMessageToolCall(acc) {
-    return (typeof acc.id === 'string' &&
-        typeof acc.function.name === 'string' &&
-        typeof acc.function.arguments === 'string');
-}
-/**
- * Merge a stream of ToolCallChunk into a single MessageToolCall.
- * @throws If the final object is missing required fields.
- * @internal
- */
-function mergeToolCallChunk(chunk, acc) {
-    const accumulator = acc
-        ? { ...acc }
-        : {
-            type: 'function',
-            function: {}
-        };
-    if (chunk.id) {
-        accumulator.id = chunk.id;
-    }
-    // Merge any extra top‐level props
-    for (const key of Object.keys(chunk)) {
-        if (!['index', 'id', 'type', 'function'].includes(key)) {
-            accumulator[key] = chunk[key];
-        }
-    }
-    if (chunk.function) {
-        if (chunk.function.name) {
-            accumulator.function.name = chunk.function.name;
-        }
-        if (chunk.function.arguments) {
-            accumulator.function.arguments =
-                (accumulator.function.arguments || '') + chunk.function.arguments;
-        }
-        // Merge any extra function‐scoped fields
-        for (const key of Object.keys(chunk.function)) {
-            if (!['name', 'arguments'].includes(key)) {
-                accumulator.function[key] = chunk.function[key];
-            }
-        }
-    }
-    return accumulator;
-}
-//# sourceMappingURL=tool-calls.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/index.js
-
-
-
-
-
-
-//# sourceMappingURL=index.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-client.js
 
 
@@ -110201,15 +111023,21 @@ class OrchestrationClient {
         return new OrchestrationResponse(response);
     }
     async stream(prompt, controller = new AbortController(), options, requestConfig) {
-        if (typeof this.config === 'string' && options) {
-            orchestration_client_logger.warn('Stream options are not supported when using a JSON module config.');
+        try {
+            if (typeof this.config === 'string' && options) {
+                orchestration_client_logger.warn('Stream options are not supported when using a JSON module config.');
+            }
+            return await this.createStreamResponse({
+                prompt,
+                requestConfig,
+                stream: true,
+                streamOptions: options
+            }, controller);
         }
-        return this.createStreamResponse({
-            prompt,
-            requestConfig,
-            stream: true,
-            streamOptions: options
-        }, controller);
+        catch (error) {
+            controller.abort();
+            throw error;
+        }
     }
     async executeRequest(options) {
         const { prompt, requestConfig, stream, streamOptions } = options;
@@ -110239,9 +111067,8 @@ class OrchestrationClient {
         const stream = OrchestrationStream._create(streamResponse, controller);
         response.stream = stream
             ._pipe(OrchestrationStream._processChunk)
-            ._pipe(OrchestrationStream._processToolCalls, response)
-            ._pipe(OrchestrationStream._processFinishReason, response)
-            ._pipe(OrchestrationStream._processTokenUsage, response);
+            ._pipe(OrchestrationStream._processOrchestrationStreamChunkResponse, response)
+            ._pipe(OrchestrationStream._processStreamEnd, response);
         return response;
     }
     /**
@@ -110273,7 +111100,7 @@ class OrchestrationClient {
         catch (error) {
             throw new Error(`Error parsing YAML: ${error}`);
         }
-        const result = promptTemplatePostRequestSchema.safeParse(parsedObject);
+        const result = registryControllerPromptControllerCreateUpdatePromptTemplateBody.safeParse(parsedObject);
         if (!result.success) {
             throw new Error(`Prompt Template YAML does not conform to the defined type. Validation errors: ${result.error}`);
         }
@@ -110290,180 +111117,6 @@ class OrchestrationClient {
     }
 }
 //# sourceMappingURL=orchestration-client.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/internal.js
-
-
-
-
-//# sourceMappingURL=internal.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-stream.js
-
-
-
-
-const orchestration_stream_logger = (0,util_dist.createLogger)({
-    package: 'orchestration',
-    messageContext: 'orchestration-chat-completion-stream'
-});
-/**
- * Orchestration stream containing post-processing functions.
- */
-class OrchestrationStream extends SseStream {
-    iterator;
-    /**
-     * Create an orchestration stream based on the http response.
-     * @param response - Http response.
-     * @returns An orchestration stream.
-     * @internal
-     */
-    static _create(response, controller) {
-        const stream = SseStream.transformToSseStream(response, controller);
-        return new OrchestrationStream(stream.iterator, controller);
-    }
-    /**
-     * Wrap raw chunk data with chunk response class to provide helper functions.
-     * @param stream - Orchestration stream.
-     * @internal
-     */
-    static async *_processChunk(stream) {
-        for await (const chunk of stream) {
-            yield new OrchestrationStreamChunkResponse(chunk);
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processToolCalls(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process tool calls.');
-        }
-        for await (const chunk of stream) {
-            chunk.data.orchestration_result?.choices.forEach(choice => {
-                const choiceIndex = choice.index;
-                const toolCallsChunks = chunk.getDeltaToolCalls(choiceIndex);
-                if (toolCallsChunks) {
-                    let toolCallAccumulators = response
-                        ._getToolCallsAccumulators()
-                        .get(choiceIndex);
-                    if (!toolCallAccumulators) {
-                        toolCallAccumulators = new Map();
-                        response
-                            ._getToolCallsAccumulators()
-                            .set(choiceIndex, toolCallAccumulators);
-                    }
-                    toolCallsChunks.map(toolCallChunk => {
-                        const toolCallId = toolCallChunk.index;
-                        const toolCallAccumulator = mergeToolCallChunk(toolCallChunk, toolCallAccumulators.get(toolCallId));
-                        toolCallAccumulators.set(toolCallId, toolCallAccumulator);
-                    });
-                }
-            });
-            yield chunk;
-        }
-        for (const [choiceIndex, toolCallsAccumulators] of response._getToolCallsAccumulators()) {
-            const toolCalls = [];
-            for (const [id, acc] of toolCallsAccumulators.entries()) {
-                if (isMessageToolCall(acc)) {
-                    toolCalls.push(acc);
-                }
-                else {
-                    orchestration_stream_logger.error(`Error while parsing tool calls for choice index ${choiceIndex}: Tool call with id ${id} was incomplete.`);
-                }
-            }
-            response._setToolCalls(choiceIndex, toolCalls);
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processFinishReason(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process finish reasons.');
-        }
-        for await (const chunk of stream) {
-            chunk.data.orchestration_result?.choices.forEach(choice => {
-                const choiceIndex = choice.index;
-                const finishReason = chunk.getFinishReason(choiceIndex);
-                if (finishReason) {
-                    response._getFinishReasons().set(choiceIndex, finishReason);
-                    switch (finishReason) {
-                        case 'content_filter':
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with content filter hit.`);
-                            break;
-                        case 'length':
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with token length exceeded.`);
-                            break;
-                        case 'stop':
-                        case 'tool_calls':
-                        case 'function_call':
-                            orchestration_stream_logger.debug(`Choice ${choiceIndex}: Stream finished.`);
-                            break;
-                        default:
-                            orchestration_stream_logger.error(`Choice ${choiceIndex}: Stream finished with unknown reason '${finishReason}'.`);
-                    }
-                }
-            });
-            yield chunk;
-        }
-    }
-    /**
-     * @internal
-     */
-    static async *_processTokenUsage(stream, response) {
-        if (!response) {
-            throw new Error('Response is required to process token usage.');
-        }
-        for await (const chunk of stream) {
-            const usage = chunk.getTokenUsage();
-            if (usage) {
-                response._setTokenUsage(usage);
-                orchestration_stream_logger.debug(`Token usage: ${JSON.stringify(usage)}`);
-            }
-            yield chunk;
-        }
-    }
-    /**
-     * Transform a stream of chunks into a stream of content strings.
-     * @param stream - Orchestration stream.
-     * @param choiceIndex - The index of the choice to parse.
-     * @internal
-     */
-    static async *_processContentStream(stream) {
-        for await (const chunk of stream) {
-            const deltaContent = chunk.getDeltaContent();
-            if (!deltaContent) {
-                continue;
-            }
-            yield deltaContent;
-        }
-    }
-    constructor(iterator, controller) {
-        super(iterator, controller);
-        this.iterator = iterator;
-    }
-    /**
-     * Pipe the stream through a processing function.
-     * @param processFn - The function to process the input stream.
-     * @param response - The `OrchestrationStreamResponse` object for process function to store finish reason, token usage, etc.
-     * @returns The output stream containing processed items.
-     * @internal
-     */
-    _pipe(processFn, response) {
-        if (response) {
-            return new OrchestrationStream(() => processFn(this, response), this.controller);
-        }
-        return new OrchestrationStream(() => processFn(this), this.controller);
-    }
-    /**
-     * Transform the stream of chunks into a stream of content strings.
-     * @param this - Orchestration stream.
-     * @returns A stream of content strings.
-     */
-    toContentStream() {
-        return new OrchestrationStream(() => OrchestrationStream._processContentStream(this), this.controller);
-    }
-}
-//# sourceMappingURL=orchestration-stream.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/index.js
 
 
