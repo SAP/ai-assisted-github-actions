@@ -89087,7 +89087,7 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
     const { blockQuote, commentString, lineWidth } = ctx.options;
     // 1. Block can't end in whitespace unless the last line is non-empty.
     // 2. Strings consisting of only whitespace are best rendered explicitly.
-    if (!blockQuote || /\n[\t ]+$/.test(value) || /^\s*$/.test(value)) {
+    if (!blockQuote || /\n[\t ]+$/.test(value)) {
         return quotedString(value, ctx);
     }
     const indent = ctx.indent ||
@@ -95825,6 +95825,9 @@ function defineLazy(object, key, getter) {
         configurable: true,
     });
 }
+function objectClone(obj) {
+    return Object.create(Object.getPrototypeOf(obj), Object.getOwnPropertyDescriptors(obj));
+}
 function assignProp(target, prop, value) {
     Object.defineProperty(target, prop, {
         value,
@@ -95905,6 +95908,11 @@ function isPlainObject(o) {
         return false;
     }
     return true;
+}
+function shallowClone(o) {
+    if (isPlainObject(o))
+        return { ...o };
+    return o;
 }
 function numKeys(data) {
     let keyCount = 0;
@@ -97582,7 +97590,7 @@ function _default(Class, innerType, defaultValue) {
         type: "default",
         innerType,
         get defaultValue() {
-            return typeof defaultValue === "function" ? defaultValue() : defaultValue;
+            return typeof defaultValue === "function" ? defaultValue() : util.shallowClone(defaultValue);
         },
     });
 }
@@ -98056,7 +98064,7 @@ const safeParseAsync = /* @__PURE__*/ _safeParseAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 0,
-    patch: 14,
+    patch: 16,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -100395,7 +100403,7 @@ function array(element, params) {
 // .keyof
 function keyof(schema) {
     const shape = schema._zod.def.shape;
-    return literal(Object.keys(shape));
+    return schemas_enum(Object.keys(shape));
 }
 const ZodObject = /*@__PURE__*/ $constructor("ZodObject", (inst, def) => {
     $ZodObject.init(inst, def);
@@ -100420,7 +100428,7 @@ function object(shape, params) {
     const def = {
         type: "object",
         get shape() {
-            assignProp(this, "shape", { ...shape });
+            assignProp(this, "shape", shape ? objectClone(shape) : {});
             return this.shape;
         },
         ...normalizeParams(params),
@@ -100432,7 +100440,7 @@ function strictObject(shape, params) {
     return new ZodObject({
         type: "object",
         get shape() {
-            util.assignProp(this, "shape", { ...shape });
+            util.assignProp(this, "shape", util.objectClone(shape));
             return this.shape;
         },
         catchall: never(),
@@ -100444,7 +100452,7 @@ function looseObject(shape, params) {
     return new ZodObject({
         type: "object",
         get shape() {
-            util.assignProp(this, "shape", { ...shape });
+            util.assignProp(this, "shape", util.objectClone(shape));
             return this.shape;
         },
         catchall: unknown(),
@@ -100726,7 +100734,7 @@ function schemas_default(innerType, defaultValue) {
         type: "default",
         innerType: innerType,
         get defaultValue() {
-            return typeof defaultValue === "function" ? defaultValue() : defaultValue;
+            return typeof defaultValue === "function" ? defaultValue() : shallowClone(defaultValue);
         },
     });
 }
@@ -100740,7 +100748,7 @@ function prefault(innerType, defaultValue) {
         type: "prefault",
         innerType: innerType,
         get defaultValue() {
-            return typeof defaultValue === "function" ? defaultValue() : defaultValue;
+            return typeof defaultValue === "function" ? defaultValue() : shallowClone(defaultValue);
         },
     });
 }
