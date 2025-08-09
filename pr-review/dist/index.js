@@ -98064,7 +98064,7 @@ const safeParseAsync = /* @__PURE__*/ _safeParseAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 0,
-    patch: 16,
+    patch: 17,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -98749,7 +98749,7 @@ const $ZodObject = /*@__PURE__*/ $constructor("$ZodObject", (inst, def) => {
     const _normalized = cached(() => {
         const keys = Object.keys(def.shape);
         for (const k of keys) {
-            if (!(def.shape[k] instanceof $ZodType)) {
+            if (!def.shape[k]._zod.traits.has("$ZodType")) {
                 throw new Error(`Invalid element at key "${k}": expected a Zod schema`);
             }
         }
@@ -99671,7 +99671,8 @@ const $ZodTemplateLiteral = /*@__PURE__*/ (/* unused pure expression or super */
     $ZodType.init(inst, def);
     const regexParts = [];
     for (const part of def.parts) {
-        if (part instanceof $ZodType) {
+        if (typeof part === "object" && part !== null) {
+            // is Zod schema
             if (!part._zod.pattern) {
                 // if (!source)
                 throw new Error(`Invalid template literal part, no pattern found: ${[...part._zod.traits].shift()}`);
