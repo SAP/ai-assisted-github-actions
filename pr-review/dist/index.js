@@ -98196,7 +98196,7 @@ const safeDecodeAsync = /* @__PURE__*/ _safeDecodeAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 1,
-    patch: 0,
+    patch: 1,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -100267,7 +100267,7 @@ const errors_initializer = (inst, issues) => {
     // });
 };
 const ZodError = $constructor("ZodError", errors_initializer);
-const errors_ZodRealError = $constructor("ZodError", errors_initializer, {
+const ZodRealError = $constructor("ZodError", errors_initializer, {
     Parent: Error,
 });
 // /** @deprecated Use `z.core.$ZodErrorMapCtx` instead. */
@@ -100276,19 +100276,19 @@ const errors_ZodRealError = $constructor("ZodError", errors_initializer, {
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/classic/parse.js
 
 
-const classic_parse_parse = /* @__PURE__ */ _parse(errors_ZodRealError);
-const classic_parse_parseAsync = /* @__PURE__ */ _parseAsync(errors_ZodRealError);
-const parse_safeParse = /* @__PURE__ */ _safeParse(errors_ZodRealError);
-const parse_safeParseAsync = /* @__PURE__ */ _safeParseAsync(errors_ZodRealError);
+const classic_parse_parse = /* @__PURE__ */ _parse(ZodRealError);
+const classic_parse_parseAsync = /* @__PURE__ */ _parseAsync(ZodRealError);
+const parse_safeParse = /* @__PURE__ */ _safeParse(ZodRealError);
+const parse_safeParseAsync = /* @__PURE__ */ _safeParseAsync(ZodRealError);
 // Codec functions
-const parse_encode = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._encode(ZodRealError)));
-const parse_decode = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._decode(ZodRealError)));
-const parse_encodeAsync = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._encodeAsync(ZodRealError)));
-const parse_decodeAsync = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._decodeAsync(ZodRealError)));
-const parse_safeEncode = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._safeEncode(ZodRealError)));
-const parse_safeDecode = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._safeDecode(ZodRealError)));
-const parse_safeEncodeAsync = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._safeEncodeAsync(ZodRealError)));
-const parse_safeDecodeAsync = /* @__PURE__ */ (/* unused pure expression or super */ null && (core._safeDecodeAsync(ZodRealError)));
+const parse_encode = /* @__PURE__ */ _encode(ZodRealError);
+const parse_decode = /* @__PURE__ */ _decode(ZodRealError);
+const parse_encodeAsync = /* @__PURE__ */ _encodeAsync(ZodRealError);
+const parse_decodeAsync = /* @__PURE__ */ _decodeAsync(ZodRealError);
+const parse_safeEncode = /* @__PURE__ */ _safeEncode(ZodRealError);
+const parse_safeDecode = /* @__PURE__ */ _safeDecode(ZodRealError);
+const parse_safeEncodeAsync = /* @__PURE__ */ _safeEncodeAsync(ZodRealError);
+const parse_safeDecodeAsync = /* @__PURE__ */ _safeDecodeAsync(ZodRealError);
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/classic/schemas.js
 
@@ -100325,6 +100325,15 @@ const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
     inst.parseAsync = async (data, params) => classic_parse_parseAsync(inst, data, params, { callee: inst.parseAsync });
     inst.safeParseAsync = async (data, params) => parse_safeParseAsync(inst, data, params);
     inst.spa = inst.safeParseAsync;
+    // encoding/decoding
+    inst.encode = (data, params) => parse_encode(inst, data, params);
+    inst.decode = (data, params) => parse_decode(inst, data, params);
+    inst.encodeAsync = async (data, params) => parse_encodeAsync(inst, data, params);
+    inst.decodeAsync = async (data, params) => parse_decodeAsync(inst, data, params);
+    inst.safeEncode = (data, params) => parse_safeEncode(inst, data, params);
+    inst.safeDecode = (data, params) => parse_safeDecode(inst, data, params);
+    inst.safeEncodeAsync = async (data, params) => parse_safeEncodeAsync(inst, data, params);
+    inst.safeDecodeAsync = async (data, params) => parse_safeDecodeAsync(inst, data, params);
     // refinements
     inst.refine = (check, params) => inst.check(refine(check, params));
     inst.superRefine = (refinement) => inst.check(superRefine(refinement));
