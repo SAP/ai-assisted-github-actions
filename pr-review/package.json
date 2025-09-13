@@ -27,20 +27,20 @@
     "mollitia": "0.2.0",
     "octokit": "5.0.3",
     "parse-diff": "0.11.1",
-    "zod": "4.1.5"
+    "zod": "4.1.8"
   },
   "devDependencies": {
     "@eslint/js": "9.35.0",
-    "@types/node": "22.18.1",
+    "@types/node": "22.18.3",
     "@vercel/ncc": "0.38.3",
     "eslint": "9.35.0",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-sonarjs": "3.0.5",
-    "eslint-plugin-unicorn": "61.0.1",
+    "eslint-plugin-unicorn": "61.0.2",
     "prettier": "3.6.2",
     "tsx": "4.20.5",
     "typescript": "5.9.2",
-    "typescript-eslint": "8.42.0",
+    "typescript-eslint": "8.43.0",
     "yaml": "2.8.1"
   }
 }
