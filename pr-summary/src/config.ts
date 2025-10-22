@@ -126,7 +126,7 @@ export const config = {
   deploymentConfig: parseInputAsJson(DeploymentConfig, "deployment-config"),
 
   /** Whether to show the model metadata in the footer of the summary. */
-  showModelMetadataFooter: parseInput(z.coerce.boolean(), "show-model-metadata-footer"),
+  showModelMetadataFooter: parseInput(z.stringbool(), "show-model-metadata-footer"),
 
   /** The base prompt that is used to generate the summary. */
   prompt: parseInput(z.coerce.string(), "prompt"),
