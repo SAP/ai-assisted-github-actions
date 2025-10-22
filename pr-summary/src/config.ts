@@ -73,25 +73,25 @@ function setSecret<T>(value: T): T {
  */
 export const config = {
   /** The personal access token of the GitHub user that is used to create the summary */
-  userToken: setSecret(parseInput(z.coerce.string(), "user-token")),
+  userToken: setSecret(parseInput(z.string(), "user-token")),
 
   /** The URL for GitHub REST API */
-  githubApiUrl: parseInput(z.coerce.string(), "github-api-url"),
+  githubApiUrl: parseInput(z.string(), "github-api-url"),
 
   /** The owner of the repository for which the summary should be created. */
-  owner: parseInput(z.coerce.string(), "owner"),
+  owner: parseInput(z.string(), "owner"),
 
   /** The name of the repository for which the summary should be created. */
-  repo: parseInput(z.coerce.string(), "repo"),
+  repo: parseInput(z.string(), "repo"),
 
   /** The number of the pull request for which the summary should be created. */
   prNumber: parseInput(z.coerce.number(), "pr-number"),
 
   /** The hash of the commit representing the code before changes. Used as the starting point in comparison. */
-  baseSha: parseInput(z.coerce.string(), "base-sha"),
+  baseSha: parseInput(z.string(), "base-sha"),
 
   /** The hash of the commit representing the code after changes. Used as the end point in comparison. */
-  headSha: parseInput(z.coerce.string(), "head-sha"),
+  headSha: parseInput(z.string(), "head-sha"),
 
   /** The service key for your SAP AI Core service instance. */
   aicoreServiceKey: ((): ServiceKey => {
@@ -102,16 +102,16 @@ export const config = {
   })(),
 
   /** A list of patterns that match the files that should be included in the summary. */
-  includeFiles: parseInputAsArray(z.coerce.string(), "include-files"),
+  includeFiles: parseInputAsArray(z.string(), "include-files"),
 
   /** A list of patterns that match the files that should be excluded from the summary. */
-  excludeFiles: parseInputAsArray(z.coerce.string(), "exclude-files"),
+  excludeFiles: parseInputAsArray(z.string(), "exclude-files"),
 
   /** A list of patterns for files that should always be included as context, regardless of whether the PR affects them. */
-  includeContextFiles: parseInputAsArray(z.coerce.string(), "include-context-files"),
+  includeContextFiles: parseInputAsArray(z.string(), "include-context-files"),
 
   /** A list of patterns for files that should be excluded from context, regardless of whether the PR affects them. */
-  excludeContextFiles: parseInputAsArray(z.coerce.string(), "exclude-context-files"),
+  excludeContextFiles: parseInputAsArray(z.string(), "exclude-context-files"),
 
   /** The name of the SAP AI Core model that is used to generate the summary. */
   model: parseInput(ModelName, "model"),
@@ -120,28 +120,28 @@ export const config = {
   modelParameters: parseInputAsJson(ModelParameters, "model-parameters"),
 
   /** The version of the model that is used to generate the summary. */
-  modelVersion: parseInput(z.coerce.string(), "model-version"),
+  modelVersion: parseInput(z.string(), "model-version"),
 
   /** The deployment configuration as JSON. For example, {"resourceGroup": "abcdefg"}. */
   deploymentConfig: parseInputAsJson(DeploymentConfig, "deployment-config"),
 
   /** Whether to show the model metadata in the footer of the summary. */
-  showModelMetadataFooter: parseInput(z.coerce.boolean(), "show-model-metadata-footer"),
+  showModelMetadataFooter: parseInput(z.stringbool(), "show-model-metadata-footer"),
 
   /** The base prompt that is used to generate the summary. */
-  prompt: parseInput(z.coerce.string(), "prompt"),
+  prompt: parseInput(z.string(), "prompt"),
 
   /** The text that is placed before the summary. */
-  headerText: parseInput(z.coerce.string(), "header-text"),
+  headerText: parseInput(z.string(), "header-text"),
 
   /** The text that is placed after the summary. */
-  footerText: parseInput(z.coerce.string(), "footer-text"),
+  footerText: parseInput(z.string(), "footer-text"),
 
   /** The action to take with previous results. */
   previousResults: parseInput(z.enum(["keep", "hide", "delete"]), "previous-results"),
 
   /** Additional prompt text that is added to the base prompt. */
-  promptAddition: parseInput(z.coerce.string(), "prompt-addition"),
+  promptAddition: parseInput(z.string(), "prompt-addition"),
 
   /** Defines where the summary will be posted. */
   displayMode: parseInput(z.enum(["comment", "comment-delta", "append", "none"]), "display-mode"),
