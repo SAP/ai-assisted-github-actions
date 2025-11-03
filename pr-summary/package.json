@@ -20,7 +20,7 @@
     "@octokit/plugin-throttling": "8.2.0",
     "@octokit/webhooks": "13.9.1",
     "@sap-ai-sdk/ai-api": "2.1.0",
-    "@sap-ai-sdk/orchestration": "1.18.0",
+    "@sap-ai-sdk/orchestration": "2.1.0",
     "axios": "1.13.1",
     "minimatch": "10.1.1",
     "mollitia": "0.2.0",
