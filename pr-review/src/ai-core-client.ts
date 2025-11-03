@@ -1,5 +1,5 @@
 import * as core from "@actions/core"
-import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orchestration"
+import { ChatMessage, OrchestrationClient } from "@sap-ai-sdk/orchestration"
 import { isAxiosError } from "axios"
 import { inspect } from "node:util"
 import { z } from "zod"
@@ -30,22 +30,24 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
     core.info("Use the OrchestrationClient to call the model")
     const orchestrationClient = new OrchestrationClient(
       {
-        llm: {
-          model_name: config.model,
-          model_params: config.modelParameters,
-          model_version: config.modelVersion,
-        },
-        templating: {
-          template: messages,
+        promptTemplating: {
+          model: {
+            name: config.model,
+            params: config.modelParameters,
+            version: config.modelVersion,
+          },
+          prompt: {
+            template: messages,
+          },
         },
       },
       config.deploymentConfig,
     )
     const completion = await orchestrationClient.chatCompletion()
-    core.info(inspect(completion.data, { depth: undefined, colors: true }))
+    core.info(inspect(completion._data, { depth: undefined, colors: true }))
 
-    modelName = (completion.data?.module_results?.llm?.model_name as string) ?? modelName
-    const tokenUsage: TokenUsage = completion.getTokenUsage()
+    modelName = completion._data.final_result.model ?? modelName
+    const tokenUsage = completion.getTokenUsage()
     promptTokens += tokenUsage.prompt_tokens
     completionTokens += tokenUsage.completion_tokens
 
@@ -68,27 +70,29 @@ export async function chatCompletionWithJsonSchema<T extends z.ZodTypeAny>(zodSc
   try {
     core.info("Use the OrchestrationClient to call the model")
     const orchestrationClient = new OrchestrationClient({
-      llm: {
-        model_name: config.model,
-        model_params: config.modelParameters,
-        model_version: config.modelVersion,
-      },
-      templating: {
-        template: [
-          ...messages,
-          {
-            role: "user",
-            content: `Always return a plain JSON document with the following schema:\n\n ${JSON.stringify(jsonSchema, undefined, 2)} `,
-          },
-        ],
+      promptTemplating: {
+        model: {
+          name: config.model,
+          params: config.modelParameters,
+          version: config.modelVersion,
+        },
+        prompt: {
+          template: [
+            ...messages,
+            {
+              role: "user",
+              content: `Always return a plain JSON document with the following schema:\n\n ${JSON.stringify(jsonSchema, undefined, 2)} `,
+            },
+          ],
+        },
       },
     })
     const completion = await orchestrationClient.chatCompletion()
     core.info(inspect(completion.rawResponse.data, { depth: undefined, colors: true }))
     responseJson = `${completion.getContent()}`
 
-    modelName = (completion.data?.module_results?.llm?.model_name as string) ?? modelName
-    const tokenUsage: TokenUsage = completion.getTokenUsage()
+    modelName = completion._data.final_result.model ?? modelName
+    const tokenUsage = completion.getTokenUsage()
     promptTokens += tokenUsage.prompt_tokens
     completionTokens += tokenUsage.completion_tokens
   } catch (error) {
