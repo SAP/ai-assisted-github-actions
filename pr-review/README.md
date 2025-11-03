@@ -88,13 +88,13 @@ Input parameters for the action:
 | Name                            | Description                                                                                                                                                                                                                                                                                                                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `aicore-service-key` (required) | The service key for your _SAP AI Core_ service instance.                                                                                                                                                                                                                                                                             |
-| `model` (required)              | The name of the SAP AI Core model that is used to generate the summary. <br /> Has to be set to an executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).                                                                                                                                        |
+| `model` (required)              | The name of the SAP AI Core model that is used to generate the review. <br /> Has to be set to an executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).                                                                                                                                         |
 | `display-mode`                  | Defines where the review will be posted. Default: `review-comment` <ul><li>`review-comment`: Adds a pull request review with comments.</li><li>`review-comment-delta`: Adds a pull request review that includes only the changes since the last comment.</li><li>`none`: No display; the action will not post any comments</li></ul> |
 | `user-token`                    | The personal access token of the GitHub user that is used to create the review. <br /> Default: `${{ github.token }}`                                                                                                                                                                                                                |
 | `model-parameters`              | Additional parameters for the model as JSON. For example, `{"temperature": 0.5, "max_tokens": 100}`. <br /> Default: `{}`                                                                                                                                                                                                            |
-| `model-version`                 | The version of the model that is used to generate the summary. <br /> Default: `latest`                                                                                                                                                                                                                                              |
+| `model-version`                 | The version of the model that is used to generate the review. <br /> Default: `latest`                                                                                                                                                                                                                                               |
 | `deployment-config`             | The deployment configuration as JSON. For example, {\"resourceGroup\": \"abcdefg\"}. <br /> Default: `{}`                                                                                                                                                                                                                            |
-| `show-model-metadata-footer`    | Whether to show the model metadata (such as model name and token usage) in the footer of the summary. <br /> Default: `true`                                                                                                                                                                                                         |
+| `show-model-metadata-footer`    | Whether to show the model metadata (such as model name and token usage) in the footer of the review. <br /> Default: `true`                                                                                                                                                                                                          |
 | `prompt`                        | The base prompt that is used to generate the review. <br /> Default: See [action.yml](action.yml#L36-L43)                                                                                                                                                                                                                            |
 | `prompt-addition`               | The addition to the base prompt that is used to generate the review.                                                                                                                                                                                                                                                                 |
 | `disclaimer-prompt`             | The prompt that is used to generate the disclaimer. <br /> Default: See [action.yml](action.yml#L51-L53)                                                                                                                                                                                                                             |
@@ -226,21 +226,23 @@ jobs:
 
 ```yaml
 jobs:
-  review-and-review:
-    name: PR Review & Review
-    runs-on: [solinas]
+  summary-and-review:
+    name: PR Summary & Review
+    runs-on: [ubuntu]
     steps:
       - uses: SAP/ai-assisted-github-actions/pr-summary@v3
-        id: review
+        id: summary
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-5
           display-mode: none
       - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-5
           header-text: |
             ## AI Review
-            ${{ steps.review.outputs.displayText }}
+            ${{ steps.summary.outputs.displayText }}
             ---
 ```
 
@@ -250,7 +252,7 @@ jobs:
 #### Specify a custom AI model:
 
 ```yaml
-- uses: SAP/ai-assisted-github-actions/pr-summary@v3
+- uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
     model: anthropic--claude-3.5-sonnet
 ```
