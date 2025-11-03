@@ -73,25 +73,25 @@ function setSecret<T>(value: T): T {
  */
 export const config = {
   /** The personal access token of the GitHub user that is used to create the review. */
-  userToken: setSecret(parseInput(z.coerce.string(), "user-token")),
+  userToken: setSecret(parseInput(z.string(), "user-token")),
 
   /** The URL for GitHub REST API */
-  githubApiUrl: parseInput(z.coerce.string(), "github-api-url"),
+  githubApiUrl: parseInput(z.string(), "github-api-url"),
 
   /** The owner of the repository for which the review should be created. */
-  owner: parseInput(z.coerce.string(), "owner"),
+  owner: parseInput(z.string(), "owner"),
 
   /** The name of the repository for which the review should be created. */
-  repo: parseInput(z.coerce.string(), "repo"),
+  repo: parseInput(z.string(), "repo"),
 
   /** The number of the pull request for which the review should be created. */
   prNumber: parseInput(z.coerce.number(), "pr-number"),
 
   /** The hash of the commit representing the code before changes. Used as the starting point in comparison. */
-  baseSha: parseInput(z.coerce.string(), "base-sha"),
+  baseSha: parseInput(z.string(), "base-sha"),
 
   /** The hash of the commit representing the code after changes. Used as the end point in comparison. */
-  headSha: parseInput(z.coerce.string(), "head-sha"),
+  headSha: parseInput(z.string(), "head-sha"),
 
   /** The service key for your SAP AI Core service instance. */
   aicoreServiceKey: ((): ServiceKey => {
@@ -102,16 +102,16 @@ export const config = {
   })(),
 
   /** A list of patterns that match the files that should be included in the review. */
-  includeFiles: parseInputAsArray(z.coerce.string(), "include-files"),
+  includeFiles: parseInputAsArray(z.string(), "include-files"),
 
   /** A list of patterns that match the files that should be excluded from the review. */
-  excludeFiles: parseInputAsArray(z.coerce.string(), "exclude-files"),
+  excludeFiles: parseInputAsArray(z.string(), "exclude-files"),
 
   /** A list of patterns for files that should always be included as context, regardless of whether the PR affects them. */
-  includeContextFiles: parseInputAsArray(z.coerce.string(), "include-context-files"),
+  includeContextFiles: parseInputAsArray(z.string(), "include-context-files"),
 
   /** A list of patterns for files that should be excluded from context, regardless of whether the PR affects them. */
-  excludeContextFiles: parseInputAsArray(z.coerce.string(), "exclude-context-files"),
+  excludeContextFiles: parseInputAsArray(z.string(), "exclude-context-files"),
 
   /** The name of the SAP AI Core model that is used to generate the review. */
   model: parseInput(ModelName, "model"),
@@ -120,7 +120,7 @@ export const config = {
   modelParameters: parseInputAsJson(ModelParameters, "model-parameters"),
 
   /** The version of the model that is used to generate the review. */
-  modelVersion: parseInput(z.coerce.string(), "model-version"),
+  modelVersion: parseInput(z.string(), "model-version"),
 
   /** The deployment configuration as JSON. For example, {"resourceGroup": "abcdefg"}. */
   deploymentConfig: parseInputAsJson(DeploymentConfig, "deployment-config"),
@@ -129,24 +129,24 @@ export const config = {
   showModelMetadataFooter: parseInput(z.stringbool(), "show-model-metadata-footer"),
 
   /** The base prompt that is used to generate the review. */
-  prompt: parseInput(z.coerce.string(), "prompt"),
+  prompt: parseInput(z.string(), "prompt"),
 
   /** Defines where the review will be posted. */
   displayMode: parseInput(z.enum(["review-comment", "review-comment-delta", "none"]), "display-mode"),
 
   /** The prompt to use for the disclaimer. */
-  disclaimerPrompt: parseInput(z.coerce.string(), "disclaimer-prompt"),
+  disclaimerPrompt: parseInput(z.string(), "disclaimer-prompt"),
 
   /** The text that is placed before the review. */
-  headerText: parseInput(z.coerce.string(), "header-text"),
+  headerText: parseInput(z.string(), "header-text"),
 
   /** The text that is placed after the review. */
-  footerText: parseInput(z.coerce.string(), "footer-text"),
+  footerText: parseInput(z.string(), "footer-text"),
 
   /** The action to take with previous results. */
   previousResults: parseInput(z.enum(["keep", "hide"]), "previous-results"),
 
   /** Additional prompt text that is added to the base prompt. */
-  promptAddition: parseInput(z.coerce.string(), "prompt-addition"),
+  promptAddition: parseInput(z.string(), "prompt-addition"),
 }
 export type Config = typeof config
