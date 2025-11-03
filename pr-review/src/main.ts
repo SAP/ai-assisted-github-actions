@@ -42,7 +42,7 @@ export async function run(config: Config): Promise<void> {
   if (config.displayMode === "review-comment-delta") {
     core.info(`Searching for preceding review comments to set old head SHA as new base SHA`)
     const previousReviews = await octokit.paginate(octokit.rest.pulls.listReviews, { ...repoRef, pull_number: config.prNumber })
-    const regex = new RegExp(`^${markerStart}\\s+<!-- (?<base>\\w+)\\.\\.\\.(?<head>\\w+) -->([\\s\\S]*?)${markerEnd}$`, "g")
+    const regex = new RegExp(String.raw`^${markerStart}\s+<!-- (?<base>\w+)\.\.\.(?<head>\w+) -->([\s\S]*?)${markerEnd}$`, "g")
     previousReviews.forEach(comment => {
       ;[...(comment.body?.matchAll(regex) ?? [])].forEach(match => {
         const commentBase = match.groups!.base!
@@ -155,7 +155,7 @@ export async function run(config: Config): Promise<void> {
       if (config.previousResults === "hide") {
         core.startGroup("Process previous reviews.")
         const previousReviews = await octokit.paginate(octokit.rest.pulls.listReviews, { ...repoRef, pull_number: config.prNumber })
-        const regex = new RegExp(`^${markerStart}([\\s\\S]*?)${markerEnd}$`, "g")
+        const regex = new RegExp(String.raw`^${markerStart}([\s\S]*?)${markerEnd}$`, "g")
         await Promise.all(
           previousReviews.map(async review => {
             if (regex.test(review.body)) {

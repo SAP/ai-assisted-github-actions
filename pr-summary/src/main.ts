@@ -39,7 +39,7 @@ export async function run(config: Config): Promise<void> {
   if (config.displayMode === "comment-delta") {
     core.info(`Searching for preceding comments to set old head SHA as new base SHA`)
     const comments = await octokit.paginate(octokit.rest.issues.listComments, { ...repoRef, issue_number: config.prNumber })
-    const regex = new RegExp(`^${markerStart}\\s+<!-- (?<base>\\w+)\\.\\.\\.(?<head>\\w+) -->([\\s\\S]*?)${markerEnd}$`, "g")
+    const regex = new RegExp(String.raw`^${markerStart}\s+<!-- (?<base>\w+)\.\.\.(?<head>\w+) -->([\s\S]*?)${markerEnd}$`, "g")
     comments.forEach(comment => {
       ;[...(comment.body?.matchAll(regex) ?? [])].forEach(match => {
         const commentBase = match.groups!.base!
@@ -138,13 +138,13 @@ export async function run(config: Config): Promise<void> {
         core.startGroup("Process previous results in PR description")
         if (config.previousResults === "hide") {
           core.info(`Hiding previous summary in PR description`)
-          const regex = new RegExp(`(?<!</summary>\\s?)(${markerStart}([\\s\\S]*?)${markerEnd})(?!\\s?</details>)`, "g")
+          const regex = new RegExp(String.raw`(?<!</summary>\s?)(${markerStart}([\s\S]*?)${markerEnd})(?!\s?</details>)`, "g")
           updatedBody = updatedBody.replace(regex, `<details><summary>This summary has been minimized.</summary>\n$1\n</details>`)
         }
         if (config.previousResults === "delete") {
           core.info(`Deleting previous summary from PR description`)
           core.info(updatedBody)
-          const regex = new RegExp(`${markerStart}([\\s\\S]*?)${markerEnd}`, "g")
+          const regex = new RegExp(String.raw`${markerStart}([\s\S]*?)${markerEnd}`, "g")
           updatedBody = updatedBody.replace(regex, "")
         }
       }
@@ -160,7 +160,7 @@ export async function run(config: Config): Promise<void> {
       if (config.previousResults === "hide" || config.previousResults === "delete") {
         core.startGroup("Process previous comments")
         const comments = await octokit.paginate(octokit.rest.issues.listComments, { ...repoRef, issue_number: config.prNumber })
-        const regex = new RegExp(`^${markerStart}([\\s\\S]*?)${markerEnd}$`, "g")
+        const regex = new RegExp(String.raw`^${markerStart}([\s\S]*?)${markerEnd}$`, "g")
         await Promise.all(
           comments.map(async comment => {
             const matches = comment.body?.match(regex)
