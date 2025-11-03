@@ -66,7 +66,7 @@ jobs:
       - uses: SAP/ai-assisted-github-actions/pr-summary@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: gpt-5
           exclude-files: package-lock.json
   review:
     name: PR Review
@@ -75,7 +75,7 @@ jobs:
       - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
-          model: gpt-4o
+          model: gpt-5
           exclude-files: package-lock.json
 ```
 

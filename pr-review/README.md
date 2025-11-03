@@ -85,32 +85,32 @@ It will generate an AI-created [pull request review comment](https://docs.github
 
 Input parameters for the action:
 
-| Name                         | Description                                                                                                                                                                                                                                                                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `aicore-service-key`         | The service key for your _SAP AI Core_ service instance.                                                                                                                                                                                                                                                                             |
-| `display-mode`               | Defines where the review will be posted. Default: `review-comment` <ul><li>`review-comment`: Adds a pull request review with comments.</li><li>`review-comment-delta`: Adds a pull request review that includes only the changes since the last comment.</li><li>`none`: No display; the action will not post any comments</li></ul> |
-| `user-token`                 | The personal access token of the GitHub user that is used to create the review. <br /> Default: `${{ github.token }}`                                                                                                                                                                                                                |
-| `model`                      | The name of the SAP AI Core model that is used to generate the summary. <br /> Default: `gpt-4o`                                                                                                                                                                                                                                     |
-| `model-parameters`           | Additional parameters for the model as JSON. For example, `{"temperature": 0.5, "max_tokens": 100}`. <br /> Default: `{}`                                                                                                                                                                                                            |
-| `model-version`              | The version of the model that is used to generate the summary. <br /> Default: `latest`                                                                                                                                                                                                                                              |
-| `deployment-config`          | The deployment configuration as JSON. For example, {\"resourceGroup\": \"abcdefg\"}. <br /> Default: `{}`                                                                                                                                                                                                                            |
-| `show-model-metadata-footer` | Whether to show the model metadata (such as model name and token usage) in the footer of the summary. <br /> Default: `true`                                                                                                                                                                                                         |
-| `prompt`                     | The base prompt that is used to generate the review. <br /> Default: See [action.yml](action.yml#L36-L43)                                                                                                                                                                                                                            |
-| `prompt-addition`            | The addition to the base prompt that is used to generate the review.                                                                                                                                                                                                                                                                 |
-| `disclaimer-prompt`          | The prompt that is used to generate the disclaimer. <br /> Default: See [action.yml](action.yml#L51-L53)                                                                                                                                                                                                                             |
-| `header-text`                | Text to be inserted before the review.                                                                                                                                                                                                                                                                                               |
-| `footer-text`                | Text to be inserted after the review.                                                                                                                                                                                                                                                                                                |
-| `previous-results`           | Define what to do with previous results. Possible values are `keep` or `hide`. <br /> Default: `keep`                                                                                                                                                                                                                                |
-| `include-files`              | A list of patterns that match the files of the PR that should be included in the review (comma or newline separated and supports glob patterns). <br /> Default: `**`                                                                                                                                                                |
-| `exclude-files`              | A list of patterns that match the files of the PR that should be excluded from the review (comma or newline separated and supports glob patterns). <br /> Default: none                                                                                                                                                              |
-| `include-context-files`      | A list of patterns for files that should always be included as context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns). <br /> Default: none                                                                                                                                      |
-| `exclude-context-files`      | A list of patterns for files that should be excluded from context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns).                                                                                                                                                                |
-| `pr-number`                  | The number of the pull request for which the review should be created. <br /> Default: `${{ github.event.number }}`                                                                                                                                                                                                                  |
-| `base-sha`                   | The hash of the commit representing the code before changes. Used as the starting point in comparison.                                                                                                                                                                                                                               |
-| `head-sha`                   | The hash of the commit representing the code after changes. Used as the end point in comparison.                                                                                                                                                                                                                                     |
-| `owner`                      | The owner of the repository for which the review should be created. <br /> Default: `${{ github.repository_owner }}`                                                                                                                                                                                                                 |
-| `repo`                       | The name of the repository for which the review should be created. <br /> Default: `${{ github.event.repository.name }}`                                                                                                                                                                                                             |
-| `github-api-url`             | The GitHub base URL will be automatically set to the correct value from the GitHub context variable. If you want to override this, you can do so here (not recommended). <br /> Default: `${{ github.api_url }}`                                                                                                                     |
+| Name                            | Description                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `aicore-service-key` (required) | The service key for your _SAP AI Core_ service instance.                                                                                                                                                                                                                                                                             |
+| `model` (required)              | The name of the SAP AI Core model that is used to generate the review. <br /> Has to be set to an executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).                                                                                                                                         |
+| `display-mode`                  | Defines where the review will be posted. Default: `review-comment` <ul><li>`review-comment`: Adds a pull request review with comments.</li><li>`review-comment-delta`: Adds a pull request review that includes only the changes since the last comment.</li><li>`none`: No display; the action will not post any comments</li></ul> |
+| `user-token`                    | The personal access token of the GitHub user that is used to create the review. <br /> Default: `${{ github.token }}`                                                                                                                                                                                                                |
+| `model-parameters`              | Additional parameters for the model as JSON. For example, `{"temperature": 0.5, "max_tokens": 100}`. <br /> Default: `{}`                                                                                                                                                                                                            |
+| `model-version`                 | The version of the model that is used to generate the review. <br /> Default: `latest`                                                                                                                                                                                                                                               |
+| `deployment-config`             | The deployment configuration as JSON. For example, {\"resourceGroup\": \"abcdefg\"}. <br /> Default: `{}`                                                                                                                                                                                                                            |
+| `show-model-metadata-footer`    | Whether to show the model metadata (such as model name and token usage) in the footer of the review. <br /> Default: `true`                                                                                                                                                                                                          |
+| `prompt`                        | The base prompt that is used to generate the review. <br /> Default: See [action.yml](action.yml#L36-L43)                                                                                                                                                                                                                            |
+| `prompt-addition`               | The addition to the base prompt that is used to generate the review.                                                                                                                                                                                                                                                                 |
+| `disclaimer-prompt`             | The prompt that is used to generate the disclaimer. <br /> Default: See [action.yml](action.yml#L51-L53)                                                                                                                                                                                                                             |
+| `header-text`                   | Text to be inserted before the review.                                                                                                                                                                                                                                                                                               |
+| `footer-text`                   | Text to be inserted after the review.                                                                                                                                                                                                                                                                                                |
+| `previous-results`              | Define what to do with previous results. Possible values are `keep` or `hide`. <br /> Default: `keep`                                                                                                                                                                                                                                |
+| `include-files`                 | A list of patterns that match the files of the PR that should be included in the review (comma or newline separated and supports glob patterns). <br /> Default: `**`                                                                                                                                                                |
+| `exclude-files`                 | A list of patterns that match the files of the PR that should be excluded from the review (comma or newline separated and supports glob patterns). <br /> Default: none                                                                                                                                                              |
+| `include-context-files`         | A list of patterns for files that should always be included as context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns). <br /> Default: none                                                                                                                                      |
+| `exclude-context-files`         | A list of patterns for files that should be excluded from context, regardless of whether the PR affects them (comma or newline separated and supports glob patterns).                                                                                                                                                                |
+| `pr-number`                     | The number of the pull request for which the review should be created. <br /> Default: `${{ github.event.number }}`                                                                                                                                                                                                                  |
+| `base-sha`                      | The hash of the commit representing the code before changes. Used as the starting point in comparison.                                                                                                                                                                                                                               |
+| `head-sha`                      | The hash of the commit representing the code after changes. Used as the end point in comparison.                                                                                                                                                                                                                                     |
+| `owner`                         | The owner of the repository for which the review should be created. <br /> Default: `${{ github.repository_owner }}`                                                                                                                                                                                                                 |
+| `repo`                          | The name of the repository for which the review should be created. <br /> Default: `${{ github.event.repository.name }}`                                                                                                                                                                                                             |
+| `github-api-url`                | The GitHub base URL will be automatically set to the correct value from the GitHub context variable. If you want to override this, you can do so here (not recommended). <br /> Default: `${{ github.api_url }}`                                                                                                                     |
 
 Output parameters for the action:
 
@@ -226,40 +226,40 @@ jobs:
 
 ```yaml
 jobs:
-  review-and-review:
-    name: PR Review & Review
-    runs-on: [solinas]
+  summary-and-review:
+    name: PR Summary & Review
+    runs-on: [ubuntu]
     steps:
       - uses: SAP/ai-assisted-github-actions/pr-summary@v3
-        id: review
+        id: summary
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-5
           display-mode: none
       - uses: SAP/ai-assisted-github-actions/pr-review@v3
         with:
           aicore-service-key: ${{ secrets.AICORE_SERVICE_KEY }}
+          model: gpt-5
           header-text: |
             ## AI Review
-            ${{ steps.review.outputs.displayText }}
+            ${{ steps.summary.outputs.displayText }}
             ---
 ```
 
 - The `display-mode` parameter is set to `none` to prevent the summary from being displayed.
 - The `displayText` output parameter is used to pass the summary to the review action as `header-text`.
 
-### Custom AI Model or Prompt
-
 #### Specify a custom AI model:
 
 ```yaml
 - uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
-    model: gpt-4o-mini
+    model: anthropic--claude-3.5-sonnet
 ```
 
 - The `model` parameter can be set to the executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).
 
-#### Extend or customize the prompt:
+#### Extend the prompt:
 
 ```yaml
 - uses: SAP/ai-assisted-github-actions/pr-review@v3
