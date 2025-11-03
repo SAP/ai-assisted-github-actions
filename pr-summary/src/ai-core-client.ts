@@ -1,5 +1,5 @@
 import * as core from "@actions/core"
-import { ChatMessage, OrchestrationClient, TokenUsage } from "@sap-ai-sdk/orchestration"
+import { ChatMessage, OrchestrationClient } from "@sap-ai-sdk/orchestration"
 import { isAxiosError } from "axios"
 import { inspect } from "node:util"
 import { config } from "./config.js"
@@ -26,22 +26,24 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
     core.info("Call OrchestrationClient")
     const orchestrationClient = new OrchestrationClient(
       {
-        llm: {
-          model_name: config.model,
-          model_params: config.modelParameters,
-          model_version: config.modelVersion,
-        },
-        templating: {
-          template: messages,
+        promptTemplating: {
+          model: {
+            name: config.model,
+            params: config.modelParameters,
+            version: config.modelVersion,
+          },
+          prompt: {
+            template: messages,
+          },
         },
       },
       config.deploymentConfig,
     )
     const completion = await orchestrationClient.chatCompletion()
-    core.info(inspect(completion.data, { depth: undefined, colors: true }))
+    core.info(inspect(completion._data, { depth: undefined, colors: true }))
 
-    modelName = (completion.data?.module_results?.llm?.model_name as string) ?? modelName
-    const tokenUsage: TokenUsage = completion.getTokenUsage()
+    modelName = completion._data.final_result.model ?? modelName
+    const tokenUsage = completion.getTokenUsage()
     promptTokens += tokenUsage.prompt_tokens
     completionTokens += tokenUsage.completion_tokens
 
