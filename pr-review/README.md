@@ -247,7 +247,15 @@ jobs:
 - The `display-mode` parameter is set to `none` to prevent the summary from being displayed.
 - The `displayText` output parameter is used to pass the summary to the review action as `header-text`.
 
-### Custom Prompt
+#### Specify a custom AI model:
+
+```yaml
+- uses: SAP/ai-assisted-github-actions/pr-summary@v3
+  with:
+    model: anthropic--claude-3.5-sonnet
+```
+
+- The `model` parameter can be set to the executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).
 
 #### Extend the prompt:
 
