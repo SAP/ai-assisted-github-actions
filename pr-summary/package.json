@@ -19,8 +19,8 @@
     "@octokit/plugin-retry": "6.1.0",
     "@octokit/plugin-throttling": "8.2.0",
     "@octokit/webhooks": "13.9.1",
-    "@sap-ai-sdk/ai-api": "2.1.0",
-    "@sap-ai-sdk/orchestration": "2.1.0",
+    "@sap-ai-sdk/ai-api": "2.2.0",
+    "@sap-ai-sdk/orchestration": "2.2.0",
     "axios": "1.13.2",
     "minimatch": "10.1.1",
     "mollitia": "0.2.0",
@@ -39,7 +39,7 @@
     "prettier": "3.6.2",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.46.4",
+    "typescript-eslint": "8.47.0",
     "yaml": "2.8.1"
   }
 }
