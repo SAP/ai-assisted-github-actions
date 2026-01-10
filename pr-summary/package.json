@@ -14,7 +14,7 @@
     "prettier:fix": "prettier --write ."
   },
   "dependencies": {
-    "@actions/core": "2.0.1",
+    "@actions/core": "2.0.2",
     "@actions/github": "7.0.0",
     "@octokit/plugin-retry": "6.1.0",
     "@octokit/plugin-throttling": "8.2.0",
@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
-    "@types/node": "24.10.4",
+    "@types/node": "24.10.6",
     "@vercel/ncc": "0.38.4",
     "eslint": "9.39.2",
     "eslint-plugin-import": "2.32.0",
@@ -39,7 +39,7 @@
     "prettier": "3.7.4",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.51.0",
+    "typescript-eslint": "8.52.0",
     "yaml": "2.8.2"
   }
 }
