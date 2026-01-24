@@ -27,7 +27,7 @@
     "mollitia": "0.2.0",
     "octokit": "5.0.5",
     "parse-diff": "0.11.1",
-    "zod": "4.3.5"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
@@ -37,10 +37,10 @@
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-sonarjs": "3.0.5",
     "eslint-plugin-unicorn": "62.0.0",
-    "prettier": "3.8.0",
+    "prettier": "3.8.1",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.53.0",
+    "typescript-eslint": "8.53.1",
     "yaml": "2.8.2"
   }
 }
