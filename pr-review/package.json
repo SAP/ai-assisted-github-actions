@@ -22,7 +22,7 @@
     "@octokit/webhooks": "13.9.1",
     "@sap-ai-sdk/ai-api": "2.6.0",
     "@sap-ai-sdk/orchestration": "2.6.0",
-    "axios": "1.13.4",
+    "axios": "1.13.5",
     "minimatch": "10.1.2",
     "mollitia": "0.2.0",
     "octokit": "5.0.5",
