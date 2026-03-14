@@ -34,12 +34,12 @@
     "@vercel/ncc": "0.38.4",
     "eslint": "9.39.4",
     "eslint-plugin-import": "2.32.0",
-    "eslint-plugin-sonarjs": "4.0.1",
+    "eslint-plugin-sonarjs": "4.0.2",
     "eslint-plugin-unicorn": "63.0.0",
     "prettier": "3.8.1",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.56.1",
+    "typescript-eslint": "8.57.0",
     "yaml": "2.8.2"
   }
 }
