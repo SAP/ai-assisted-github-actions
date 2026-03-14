@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@actions/core": "3.0.0",
-    "@actions/github": "7.0.0",
+    "@actions/github": "9.0.0",
     "@octokit/action": "7.0.2",
     "@octokit/plugin-retry": "6.1.0",
     "@octokit/plugin-throttling": "8.2.0",
