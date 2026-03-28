@@ -21,7 +21,7 @@
     "@octokit/webhooks": "13.9.1",
     "@sap-ai-sdk/ai-api": "2.9.0",
     "@sap-ai-sdk/orchestration": "2.9.0",
-    "axios": "1.13.6",
+    "axios": "1.14.0",
     "minimatch": "10.2.4",
     "mollitia": "0.2.0",
     "octokit": "5.0.5",
@@ -39,7 +39,7 @@
     "prettier": "3.8.1",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.57.1",
+    "typescript-eslint": "8.57.2",
     "yaml": "2.8.3"
   }
 }
