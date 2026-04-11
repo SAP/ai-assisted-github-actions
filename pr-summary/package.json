@@ -21,7 +21,7 @@
     "@octokit/webhooks": "13.9.1",
     "@sap-ai-sdk/ai-api": "2.9.0",
     "@sap-ai-sdk/orchestration": "2.9.0",
-    "axios": "1.14.0",
+    "axios": "1.15.0",
     "minimatch": "10.2.5",
     "mollitia": "0.2.0",
     "octokit": "5.0.5",
@@ -36,10 +36,10 @@
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-sonarjs": "4.0.2",
     "eslint-plugin-unicorn": "64.0.0",
-    "prettier": "3.8.1",
+    "prettier": "3.8.2",
     "tsx": "4.21.0",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.58.0",
+    "typescript-eslint": "8.58.1",
     "yaml": "2.8.3"
   }
 }
