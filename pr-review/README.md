@@ -98,6 +98,7 @@ Input parameters for the action:
 | `prompt`                        | The base prompt that is used to generate the review. <br /> Default: See [action.yml](action.yml#L36-L43)                                                                                                                                                                                                                            |
 | `prompt-addition`               | The addition to the base prompt that is used to generate the review.                                                                                                                                                                                                                                                                 |
 | `disclaimer-prompt`             | The prompt that is used to generate the disclaimer. <br /> Default: See [action.yml](action.yml#L51-L53)                                                                                                                                                                                                                             |
+| `summary-prompt`                | The prompt that is used to generate the summary shown in the review body. <br /> Default: `Append a brief summary of the key review findings. No lists, no headings.`                                                                                                                                                                |
 | `header-text`                   | Text to be inserted before the review.                                                                                                                                                                                                                                                                                               |
 | `footer-text`                   | Text to be inserted after the review.                                                                                                                                                                                                                                                                                                |
 | `previous-results`              | Define what to do with previous results. Possible values are `keep` or `hide`. <br /> Default: `keep`                                                                                                                                                                                                                                |
@@ -114,11 +115,12 @@ Input parameters for the action:
 
 Output parameters for the action:
 
-| Name       | Description                             |
-| ---------- | --------------------------------------- |
-| `comments` | An array of review comments for the PR. |
-| `reviewId` | The ID of the created GitHub PR review. |
-| `review`   | The created GitHub PR review.           |
+| Name       | Description                                               |
+| ---------- | --------------------------------------------------------- |
+| `comments` | The AI-generated review comments as a JSON array.         |
+| `reviewId` | The ID of the created GitHub PR review.                   |
+| `review`   | The full GitHub PR review object returned by the API.     |
+| `summary`  | The AI-generated summary text used in the PR review body. |
 
 ## Advanced Examples
 
@@ -206,6 +208,20 @@ jobs:
 
 ### Influence the Display Mode
 
+#### Customize the review summary:
+
+The `summary-prompt` parameter controls how the review body text is generated. The action runs a separate AI call with this prompt and the review findings as input.
+
+To add static content around it, see [Add a header or footer](#add-a-header-or-footer).
+
+```yaml
+- uses: ai-assisted-actions/pr-review@v2
+  with:
+    model: gpt-5.4
+    summary-prompt: |
+      Summarize the findings in bullet points, grouped by severity.
+```
+
 #### Add a header or footer:
 
 ```yaml
@@ -254,7 +270,7 @@ jobs:
 ```yaml
 - uses: SAP/ai-assisted-github-actions/pr-review@v3
   with:
-    model: anthropic--claude-3.5-sonnet
+    model: anthropic--claude-4.6-opus
 ```
 
 - The `model` parameter can be set to the executable ID of the [available generative AI models](https://me.sap.com/notes/3437766/E).
