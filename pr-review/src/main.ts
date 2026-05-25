@@ -1,6 +1,5 @@
 import * as core from "@actions/core"
 import * as github from "@actions/github"
-import { RestEndpointMethodTypes } from "@octokit/plugin-rest-endpoint-methods/dist-types/generated/parameters-and-response-types.js"
 import { retry } from "@octokit/plugin-retry"
 import { throttling, ThrottlingOptions } from "@octokit/plugin-throttling"
 import { ChatMessage } from "@sap-ai-sdk/orchestration"
@@ -99,14 +98,14 @@ export async function run(config: Config): Promise<void> {
     const {
       data: { tree },
     } = await octokit.rest.git.getTree({ ...repoRef, tree_sha: pullRequest.head.sha, recursive: "true" })
-    for (const file of tree) {
-      if (file.path && file.sha && config.includeContextFiles.some(pattern => minimatch(file.path!, pattern, matchOptions))) {
-        if (config.excludeContextFiles.some(pattern => minimatch(file.path!, pattern, matchOptions))) {
-          core.info(`Skipping context file ${file.path} (is excluded).`)
+    for (const { path: filePath, sha: fileSha } of tree) {
+      if (filePath && fileSha && config.includeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+        if (config.excludeContextFiles.some(pattern => minimatch(filePath, pattern, matchOptions))) {
+          core.info(`Skipping context file ${filePath} (is excluded).`)
         } else {
-          core.info(`Reading context file ${file.path}`)
-          const { data: blob } = await octokit.rest.git.getBlob({ ...repoRef, file_sha: file.sha, mediaType: { format: "raw" } })
-          const result = [`Context file ${file.path}:`, "```", blob as unknown as string, "```", ""]
+          core.info(`Reading context file ${filePath}`)
+          const { data: blob } = await octokit.rest.git.getBlob({ ...repoRef, file_sha: fileSha, mediaType: { format: "raw" } })
+          const result = [`Context file ${filePath}:`, "```", blob as unknown as string, "```", ""]
           core.info(result.join("\n"))
           content.push(...result)
         }
@@ -184,7 +183,7 @@ export async function run(config: Config): Promise<void> {
       const modelMetadataFooter = config.showModelMetadataFooter ? `<sub>${metadata.filter(Boolean).join(" | ")}</sub>` : ""
       const displayText = [markerStart, baseheadMaker, header, disclaimer, footer, modelMetadataFooter, markerEnd].filter(Boolean).join("\n")
 
-      type CreateReviewParameter = RestEndpointMethodTypes["pulls"]["createReview"]["parameters"]
+      type CreateReviewParameter = Parameters<typeof octokit.rest.pulls.createReview>[0]
       const review: CreateReviewParameter = { ...repoRef, pull_number: config.prNumber, commit_id: head, event: "COMMENT", body: displayText, comments }
       core.info(inspect(review, { depth: undefined, colors: true }))
 

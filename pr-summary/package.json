@@ -16,8 +16,8 @@
   "dependencies": {
     "@actions/core": "3.0.0",
     "@actions/github": "9.1.1",
-    "@octokit/plugin-retry": "6.1.0",
-    "@octokit/plugin-throttling": "8.2.0",
+    "@octokit/plugin-retry": "8.1.0",
+    "@octokit/plugin-throttling": "11.0.3",
     "@octokit/webhooks": "13.9.1",
     "@sap-ai-sdk/ai-api": "2.10.0",
     "@sap-ai-sdk/orchestration": "2.10.0",
