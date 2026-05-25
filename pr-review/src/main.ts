@@ -165,10 +165,16 @@ export async function run(config: Config): Promise<void> {
         )
       }
 
-      core.startGroup(`Ask LLM for a disclaimer text to add to the review description`)
-      const disclaimer = await aiCoreClient.chatCompletion([{ role: "user", content: config.disclaimerPrompt }])
-      core.info(inspect(disclaimer, { depth: undefined, colors: true }))
-      core.setOutput("disclaimer", disclaimer)
+      core.startGroup(`Ask LLM for a summary to add to the review description`)
+      const summary = await aiCoreClient.chatCompletion([
+        {
+          role: "system",
+          content: [config.disclaimerPrompt, config.summaryPrompt].join("\n"),
+        },
+        { role: "user", content: `Review findings:\n${JSON.stringify(comments.map(({ path, body }) => ({ path, body })))}` },
+      ])
+      core.info(inspect(summary, { depth: undefined, colors: true }))
+      core.setOutput("summary", summary)
 
       core.startGroup(`Create a PR review as comment with the generated comments`)
       const baseheadMaker = `<!-- ${base}...${head} -->`
@@ -180,8 +186,8 @@ export async function run(config: Config): Promise<void> {
         `Completion Tokens: ${aiCoreClient.getCompletionTokens()}`,
         base !== pullRequest.base.sha || head !== pullRequest.head.sha ? `Diff Range: ${base.slice(0, 7)}...${head.slice(0, 7)}` : "",
       ]
-      const modelMetadataFooter = config.showModelMetadataFooter ? `<sub>${metadata.filter(Boolean).join(" | ")}</sub>` : ""
-      const displayText = [markerStart, baseheadMaker, header, disclaimer, footer, modelMetadataFooter, markerEnd].filter(Boolean).join("\n")
+      const modelMetadataFooter = config.showModelMetadataFooter ? `\n<sub>${metadata.filter(Boolean).join(" | ")}</sub>` : ""
+      const displayText = [markerStart, baseheadMaker, header, summary, footer, modelMetadataFooter, markerEnd].filter(Boolean).join("\n")
 
       type CreateReviewParameter = Parameters<typeof octokit.rest.pulls.createReview>[0]
       const review: CreateReviewParameter = { ...repoRef, pull_number: config.prNumber, commit_id: head, event: "COMMENT", body: displayText, comments }
