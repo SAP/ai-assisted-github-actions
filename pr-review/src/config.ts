@@ -56,7 +56,7 @@ function parseInputAsArray<T extends z.ZodTypeAny>(zodSchema: T, name: string): 
     .split(/[\n,]/)
     .map(v => v.trim())
     .filter(Boolean)
-    .map(v => zodSchema.parse(v) as z.infer<T>)
+    .map(v => zodSchema.parse(v))
 }
 
 function setSecret<T>(value: T): T {
