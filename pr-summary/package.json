@@ -35,7 +35,7 @@
     "eslint": "9.39.4",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-sonarjs": "4.0.3",
-    "eslint-plugin-unicorn": "64.0.0",
+    "eslint-plugin-unicorn": "65.0.1",
     "prettier": "3.8.3",
     "tsx": "4.22.3",
     "typescript": "6.0.3",
