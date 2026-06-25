@@ -51,9 +51,8 @@ inputs:
       Create a kind alternative for the following term: Here's a helpful review of your code with support from AI. Some insights are predictions, not guaranteed facts, so feel free to use what works best for you. Your decisions lead the way—AI is just here to assist.
       Do not use more than 80 words. Do not use quotation marks.
   summary-prompt:
-    description: "The prompt that is used to generate the summary shown in the review body."
+    description: "Prompt used to generate a summary of review findings in the review body. When not set, the LLM is called with only the disclaimer prompt (no review comments are sent)."
     required: false
-    default: "Append a brief summary of the key review findings. No lists, no headings."
 
   display-mode:
     description: "Defines where the review will be posted (`review-comment`, `review-comment-delta`, or `none`)."

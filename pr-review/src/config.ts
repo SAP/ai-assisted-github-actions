@@ -137,7 +137,7 @@ export const config = {
   /** The prompt to use for the disclaimer. */
   disclaimerPrompt: parseInput(z.string(), "disclaimer-prompt"),
 
-  /** The prompt to use for the summary. */
+  /** The prompt to use for the summary. When empty, review comments are not sent to the LLM. */
   summaryPrompt: parseInput(z.string(), "summary-prompt"),
 
   /** The text that is placed before the review. */
