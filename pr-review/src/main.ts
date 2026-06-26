@@ -171,9 +171,7 @@ export async function run(config: Config): Promise<void> {
           role: "system",
           content: [config.disclaimerPrompt, config.summaryPrompt].join("\n\n"),
         },
-        ...(config.summaryPrompt
-          ? [{ role: "user" as const, content: `Review findings:\n${JSON.stringify(comments.map(({ path, body }) => ({ path, body })))}` }]
-          : []),
+        ...(config.summaryPrompt ? [{ role: "user" as const, content: `Review findings:\n${JSON.stringify(comments.map(({ path, body }) => ({ path, body })))}` }] : []),
       ])
       core.info(inspect(summary, { depth: undefined, colors: true }))
       core.setOutput("summary", summary)
