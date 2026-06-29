@@ -50,6 +50,9 @@ inputs:
     default: |
       Create a kind alternative for the following term: Here's a helpful review of your code with support from AI. Some insights are predictions, not guaranteed facts, so feel free to use what works best for you. Your decisions lead the way—AI is just here to assist.
       Do not use more than 80 words. Do not use quotation marks.
+  summary-prompt:
+    description: "Prompt used to generate a summary of review findings in the review body. When not set, the LLM is called with only the disclaimer prompt (no review comments are sent)."
+    required: false
 
   display-mode:
     description: "Defines where the review will be posted (`review-comment`, `review-comment-delta`, or `none`)."
@@ -105,8 +108,14 @@ inputs:
     default: "${{ github.api_url }}"
 
 outputs:
+  comments:
+    description: "The AI-generated review comments as a JSON array."
   reviewId:
     description: "The ID of the created GitHub PR review."
+  review:
+    description: "The full GitHub PR review object returned by the API."
+  summary:
+    description: "The AI-generated summary text used in the PR review body."
 
 runs:
   using: node20
