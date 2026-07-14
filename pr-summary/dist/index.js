@@ -147749,7 +147749,7 @@ class line_decoder_LineDecoder {
         if (!text) {
             return [];
         }
-        const trailingNewline = line_decoder_LineDecoder.NEWLINE_CHARS.has(text[text.length - 1] || '');
+        const trailingNewline = line_decoder_LineDecoder.NEWLINE_CHARS.has(text.at(-1) || '');
         let lines = text.split(line_decoder_LineDecoder.NEWLINE_REGEXP);
         // if there is a trailing new line then the last entry will be an empty
         // string which we don't care about
@@ -147930,6 +147930,49 @@ class SseStream {
     }
     [Symbol.asyncIterator]() {
         return this.iterator();
+    }
+    /**
+     * Converts this stream to a newline-delimited JSON ReadableStream.
+     * @returns A ReadableStream of UTF-8 encoded NDJSON bytes.
+     */
+    toReadableStream() {
+        let iter;
+        const encoder = new TextEncoder();
+        const { controller: abortController } = this;
+        const getIterator = () => this[Symbol.asyncIterator]();
+        async function cleanup() {
+            try {
+                await iter.return?.();
+            }
+            catch {
+                // Best-effort: ignore errors during iterator teardown.
+            }
+            finally {
+                abortController.abort();
+            }
+        }
+        return new ReadableStream({
+            async start() {
+                iter = getIterator();
+            },
+            async pull(controller) {
+                try {
+                    const { value, done } = await iter.next();
+                    if (done) {
+                        controller.close();
+                        return;
+                    }
+                    controller.enqueue(encoder.encode(JSON.stringify(value) + '\n'));
+                }
+                catch (err) {
+                    await cleanup();
+                    controller.error(err);
+                }
+            },
+            async cancel() {
+                await cleanup();
+            }
+        });
     }
 }
 /**
@@ -152516,7 +152559,7 @@ const ConfigurationApi = {
  * Representation of the 'DeploymentApi'.
  * This API is part of the 'AI_CORE_API' service.
  */
-const DeploymentApi = {
+const deployment_api_DeploymentApi = {
     _defaultBasePath: undefined,
     /**
      * Retrieve a list of deployments that match the specified filter criteria.
@@ -152531,7 +152574,7 @@ const DeploymentApi = {
     deploymentQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments', {
         headerParameters,
         queryParameters
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Create a deployment using the configuration specified by configurationId after synchronously checking the
      * correctness of the configuration.
@@ -152546,7 +152589,7 @@ const DeploymentApi = {
             'content-type': 'application/json',
             ...headerParameters
         }
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Update status of multiple deployments. stop or delete multiple deployments.
      * @param body - Request body.
@@ -152559,7 +152602,7 @@ const DeploymentApi = {
             'content-type': 'application/merge-patch+json',
             ...headerParameters
         }
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Retrieve details for execution with deploymentId.
      * @param deploymentId - Deployment identifier
@@ -152571,7 +152614,7 @@ const DeploymentApi = {
         pathParameters: { deploymentId },
         headerParameters,
         queryParameters
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Update target status of a deployment to stop a deployment or change the configuration to be used by the
      * deployment after synchronously checking the correctness of the configuration. A change of configuration is only
@@ -152589,7 +152632,7 @@ const DeploymentApi = {
             'content-type': 'application/json',
             ...headerParameters
         }
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Mark deployment with deploymentId as deleted.
      * @param deploymentId - Deployment identifier
@@ -152599,7 +152642,7 @@ const DeploymentApi = {
     deploymentDelete: (deploymentId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/deployments/{deploymentId}', {
         pathParameters: { deploymentId },
         headerParameters
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Retrieve the number of available deployments. The number can be filtered by
      * scenarioId, configurationId, executableIdsList or by deployment status.
@@ -152611,7 +152654,7 @@ const DeploymentApi = {
     deploymentCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/$count', {
         headerParameters,
         queryParameters
-    }, DeploymentApi._defaultBasePath),
+    }, deployment_api_DeploymentApi._defaultBasePath),
     /**
      * Retrieve logs of a deployment for getting insight into the deployment results or failures.
      * @param deploymentId - Deployment identifier
@@ -152623,7 +152666,7 @@ const DeploymentApi = {
         pathParameters: { deploymentId },
         headerParameters,
         queryParameters
-    }, DeploymentApi._defaultBasePath)
+    }, deployment_api_DeploymentApi._defaultBasePath)
 };
 //# sourceMappingURL=deployment-api.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/execution-api.js
@@ -153965,6 +154008,26 @@ async function resolveDeploymentUrl(opts) {
     return (await resolveDeployment(opts)).deploymentUrl;
 }
 /**
+ * Fetch a deployment by ID and return its URL.
+ * Throws if the request fails or the deployment has no URL.
+ * @param deploymentId - The ID of the deployment.
+ * @param resourceGroup - The resource group of the deployment.
+ * @param destination - The destination to use for the request.
+ * @returns A promise of the deployment URL.
+ * @internal
+ */
+async function resolveDeploymentUrlById(deploymentId, resourceGroup, destination) {
+    const { deploymentUrl } = await DeploymentApi.deploymentGet(deploymentId, {}, { 'AI-Resource-Group': resourceGroup })
+        .execute(destination)
+        .catch((err) => {
+        throw new ErrorWithCause(`Fetching deployment for ID '${deploymentId}' failed.`, err);
+    });
+    if (!deploymentUrl) {
+        throw new Error(`Deployment for ID '${deploymentId}' has no deployment URL. Ensure the deployment is running.`);
+    }
+    return deploymentUrl;
+}
+/**
  * Get all deployments that match the given criteria.
  * @param opts - The options for the deployment resolution.
  * @returns A promise of an array of deployments.
@@ -153973,7 +154036,7 @@ async function resolveDeploymentUrl(opts) {
 async function getAllDeployments(opts) {
     const { destination, scenarioId, executableId, resourceGroup = 'default' } = opts;
     try {
-        const { resources } = await DeploymentApi.deploymentQuery({
+        const { resources } = await deployment_api_DeploymentApi.deploymentQuery({
             scenarioId,
             status: 'RUNNING',
             ...(executableId && { executableIds: [executableId] })
@@ -153984,6 +154047,30 @@ async function getAllDeployments(opts) {
     catch (error) {
         throw new util_dist.ErrorWithCause('Failed to fetch the list of deployments.', error);
     }
+}
+/**
+ * Resolve the deployment URL for a model deployment.
+ * If given a deployment ID, fetches the URL for that specific deployment.
+ * If given a model name, looks up a running deployment for that model.
+ * @param modelDeployment - Deployment identified by model name/version or by ID. Resource group should be passed through the resolution options and will be ignored here.
+ * @param options - Base resolution options (scenarioId, executableId, etc.) without `model` — that is derived from `modelDeployment`.
+ * @returns A promise of the deployment URL.
+ * @internal
+ */
+async function resolveDeploymentUrlForModel(modelDeployment, options) {
+    if (isDeploymentIdConfig(modelDeployment)) {
+        return resolveDeploymentUrlById(modelDeployment.deploymentId, options.resourceGroup, options.destination);
+    }
+    const model = translateToFoundationModel(modelDeployment);
+    const url = await resolveDeploymentUrl({
+        ...options,
+        resourceGroup: options.resourceGroup,
+        model
+    });
+    if (!url) {
+        throw new Error(`Deployment for model '${model.name}' has no deployment URL. Ensure the deployment is running.`);
+    }
+    return url;
 }
 /**
  * Get the deployment ID for a foundation model scenario.
@@ -154180,7 +154267,11 @@ const orchestration_client_logger = (0,util_dist.createLogger)({
     messageContext: 'orchestration-client'
 });
 /**
- * Get the orchestration client.
+ * Client for the SAP AI Core Orchestration Service.
+ * @remarks
+ * The configuration (model, parameters, tools, etc.) is fixed at construction time.
+ * To use different model parameters or tools for a specific request,
+ * create a new `OrchestrationClient` instance with the desired configuration.
  */
 class OrchestrationClient {
     config;
