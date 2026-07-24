@@ -2071,7 +2071,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.agentCache = void 0;
+exports.defaultAgentOptions = exports.agentCache = void 0;
 exports.getAgentConfig = getAgentConfig;
 exports.urlAndAgent = urlAndAgent;
 const promises_1 = __nccwpck_require__(51455);
@@ -2080,12 +2080,11 @@ const node_https_1 = __importDefault(__nccwpck_require__(44708));
 const jks = __importStar(__nccwpck_require__(73008));
 const util_1 = __nccwpck_require__(9471);
 /* Careful the proxy imports cause circular dependencies if imported from scp directly */
-// eslint-disable-next-line import-x/no-internal-modules
+/* eslint-disable import-x/no-internal-modules */
 const get_protocol_1 = __nccwpck_require__(33980);
-// eslint-disable-next-line import-x/no-internal-modules
+const jwt_1 = __nccwpck_require__(3444);
 const cache_1 = __nccwpck_require__(4205);
 const http_proxy_util_1 = __nccwpck_require__(46624);
-// eslint-disable-next-line import-x/no-internal-modules
 const register_destination_cache_1 = __nccwpck_require__(44901);
 const logger = (0, util_1.createLogger)({
     package: 'connectivity',
@@ -2242,7 +2241,7 @@ function isSupportedFormat(format) {
     return !!format && supportedCertificateFormats.includes(format);
 }
 function selectCertificate(destination) {
-    const certificate = destination.certificates.find(c => c.name === destination.keyStoreName);
+    const certificate = destination.certificates?.find((c) => c.name === destination.keyStoreName);
     if (!certificate) {
         throw Error(`No certificate with name ${destination.keyStoreName} could be found on the destination!`);
     }
@@ -2266,21 +2265,116 @@ exports.agentCache = new cache_1.Cache(3600000, // 1 hour
 100 // max 100 LRU-cached agents
 );
 /**
+ * Default options for the http(s) agents.
+ * @internal
+ */
+exports.defaultAgentOptions = {
+    keepAlive: true,
+    timeout: 5000
+};
+/**
+ * Builds a secret-free cache key input for the agent cache.
+ * For direct destinations the agent is fully defined by its protocol, TLS options and
+ * optional `agentOptions`. For the on-premise connectivity proxy all requests share the
+ * same proxy origin, so keep-alive sockets would otherwise be reused across Cloud
+ * Connector tunnels. To prevent this, the key is additionally scoped by the location ID,
+ * the proxy host/port and the propagated principal (derived from stable, non-secret JWT
+ * claims).
+ * @param destination - Destination to derive the cache key dimensions from.
+ * @param options - TLS/agent options that define the agent instance.
+ * @returns A plain object to be hashed into the agent cache key.
+ */
+function getAgentCacheKeyInput(destination, options) {
+    const protocol = (0, get_protocol_1.getProtocolOrDefault)(destination);
+    const keyInput = {
+        protocol,
+        options,
+        agentOptions: destination.agentOptions
+    };
+    if (destination.proxyType === 'OnPremise') {
+        keyInput.cloudConnectorLocationId = destination.cloudConnectorLocationId;
+        keyInput.proxyHost = destination.proxyConfiguration?.host;
+        keyInput.proxyPort = destination.proxyConfiguration?.port;
+        const principal = getPrincipalCacheKey(destination);
+        // PrincipalPropagation binds the Cloud Connector tunnel to the propagated
+        // user. Without a stable userId we cannot derive a safe cache key and must
+        // skip caching to avoid reusing a tunnel across principals.
+        if (destination.authentication === 'PrincipalPropagation' &&
+            !principal?.userId) {
+            return undefined;
+        }
+        // For all other OnPremise flows the principal is not strictly required, but
+        // we still scope by full available principal information for better cache isolation.
+        if (principal) {
+            keyInput.principal = principal;
+        }
+    }
+    return keyInput;
+}
+/**
+ * Derives a stable, non-secret identity scope for OnPremise destinations from
+ * the propagated JWT. The raw token must not be part of the cache key, because
+ * it is a secret and rotates on every refresh. `userId` and `tenantId` are
+ * stable claims that scope the cache entry to a principal.
+ * PrincipalPropagation flows require a `userId`; other flows include the
+ * principal only when a user token is present.
+ * @param destination - Destination carrying the propagated principal JWT.
+ * @returns A stable identity scope, or `undefined` if no usable token is present.
+ */
+function getPrincipalCacheKey(destination) {
+    const authHeader = destination.proxyConfiguration?.headers?.['SAP-Connectivity-Authentication'];
+    if (!authHeader) {
+        return undefined;
+    }
+    const encoded = authHeader.replace(/^Bearer /i, '');
+    try {
+        const decoded = (0, jwt_1.decodeJwt)(encoded);
+        const tenantId = (0, jwt_1.getTenantId)(decoded);
+        const userId = (0, jwt_1.userId)(decoded);
+        if (!tenantId && !userId) {
+            return undefined;
+        }
+        return { userId, tenantId };
+    }
+    catch {
+        // A malformed token must not break agent creation; fall back to location/host scoping.
+        return undefined;
+    }
+}
+async function getAgentCacheKey(destination, options) {
+    const cacheKeyInput = getAgentCacheKeyInput(destination, options);
+    // If the cache key is undefined, avoid caching the agent.
+    if (!cacheKeyInput) {
+        return undefined;
+    }
+    return (0, cache_1.hashCacheKey)(cacheKeyInput);
+}
+function createAgentImpl(destination, options) {
+    const protocol = (0, get_protocol_1.getProtocolOrDefault)(destination);
+    logger.debug(`Creating new ${protocol.toUpperCase()} agent for destination ${destination.name || '<unknown>'}`);
+    const optionsWithDefaults = {
+        ...exports.defaultAgentOptions,
+        ...destination.agentOptions,
+        ...options
+    };
+    return protocol === 'https'
+        ? { httpsAgent: new node_https_1.default.Agent(optionsWithDefaults) }
+        : { httpAgent: new node_http_1.default.Agent(optionsWithDefaults) };
+}
+/**
  * @internal
  * Agents are cached for up to one hour, but can be evicted earlier if more than 100 agents are created.
  * See https://nodejs.org/api/https.html#https_https_createserver_options_requestlistener for details on the possible options
  */
-function createAgent(destination, options) {
-    const protocol = (0, get_protocol_1.getProtocolOrDefault)(destination);
-    const cacheKey = (0, cache_1.hashCacheKey)({ protocol, options });
-    return exports.agentCache.getOrInsertComputed(cacheKey, () => {
-        logger.debug(`Creating new ${protocol.toUpperCase()} agent for destination ${destination.name || '<unknown>'}`);
-        const optionsWithDefaults = { keepAlive: true, ...options };
-        const entry = protocol === 'https'
-            ? { httpsAgent: new node_https_1.default.Agent(optionsWithDefaults) }
-            : { httpAgent: new node_http_1.default.Agent(optionsWithDefaults) };
-        return { entry };
-    });
+async function createAgent(destination, options) {
+    const cacheKey = await getAgentCacheKey(destination, options);
+    if (!cacheKey) {
+        logger.info(`Could not derive a cache key for destination ${destination.name || '<unknown>'}. Creating a new agent without caching.`);
+        return createAgentImpl(destination, options);
+    }
+    return exports.agentCache.getOrInsertComputed(cacheKey, () => ({
+        entry: createAgentImpl(destination, options)
+    }));
 }
 /**
  * Builds part of the request config containing the URL and if needed proxy agents or normal http agents.
@@ -2739,14 +2833,19 @@ exports.Cache = Cache;
  * @param value - The value to hash.
  * @returns A hash of the given value using a cryptographic hash function.
  */
-function hashCacheKey(value) {
-    const serialized = (0, safe_stable_stringify_1.stringify)(value);
-    // TODO: crypto.hash is available in Node.js v20.12.0 and later.
-    // Remove the fallback to crypto.createHash once Node.js 22 is the minimum supported version.
-    if (typeof crypto.hash === 'function') {
-        return crypto.hash('blake2s256', serialized, 'base64url');
-    }
-    return crypto.createHash('blake2s256').update(serialized).digest('base64url');
+async function hashCacheKey(value) {
+    const stringifiedValue = (0, safe_stable_stringify_1.stringify)(value);
+    const encodedValue = new TextEncoder().encode(stringifiedValue);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encodedValue);
+    // TODO: Supported in Node.js 25 and later + browsers
+    // if ((Uint8Array.prototype as any).toHex) {
+    //   // Use toHex if supported.
+    //   return (new Uint8Array(hashBuffer) as any).toHex(); // Convert ArrayBuffer to hex string.
+    // }
+    // If toHex() is not supported, fall back to an alternative implementation.
+    const hashArray = Array.from(new Uint8Array(hashBuffer)); // convert buffer to byte array
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join(''); // convert bytes to hex string
+    return hashHex;
 }
 function isExpired(item) {
     if (item.expires === undefined) {
@@ -3335,7 +3434,7 @@ function getDestinationsFromEnv() {
             throw new util_1.ErrorWithCause('Error in parsing the destinations from the environment variable.', err);
         }
         validateDestinations(destinations);
-        return destinations.map(destination => (0, destination_1.isDestinationConfiguration)(destination)
+        return destinations.map((destination) => (0, destination_1.isDestinationConfiguration)(destination)
             ? (0, destination_1.parseDestination)(destination)
             : (0, destination_1.sanitizeDestination)(destination));
     }
@@ -4083,6 +4182,39 @@ function isHttpDestination(destination) {
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -4092,7 +4224,7 @@ exports.fetchDestinationWithoutTokenRetrieval = fetchDestinationWithoutTokenRetr
 exports.fetchCertificate = fetchCertificate;
 exports.fetchDestinationWithTokenRetrieval = fetchDestinationWithTokenRetrieval;
 const util_1 = __nccwpck_require__(9471);
-const axios_1 = __importDefault(__nccwpck_require__(87269));
+const axios_1 = __importStar(__nccwpck_require__(87269));
 const internal_1 = __nccwpck_require__(71426);
 const resilience_1 = __nccwpck_require__(57816);
 const async_retry_1 = __importDefault(__nccwpck_require__(45195));
@@ -4126,7 +4258,7 @@ async function fetchDestinations(destinationServiceUri, serviceToken, type, opti
     const headers = (0, jwt_1.wrapJwtInHeader)(serviceToken).headers;
     return callDestinationEndpoint({ uri: targetUri, tenantId: getTenantIdFromTokens(serviceToken) }, headers)
         .then(response => {
-        const destinations = response.data.map(destination => (0, destination_1.parseDestination)(destination));
+        const destinations = response.data.map((destination) => (0, destination_1.parseDestination)(destination));
         if (options?.useCache) {
             destination_service_cache_1.destinationServiceCache.cacheRetrievedDestinations(targetUri, (0, jwt_1.decodeJwt)(serviceToken), destinations);
         }
@@ -4157,7 +4289,8 @@ async function fetchDestinationWithoutTokenRetrieval(destinationName, destinatio
         };
     }
     catch (err) {
-        if (err.response?.status === 404 &&
+        if ((0, axios_1.isAxiosError)(err) &&
+            err.response?.status === 404 &&
             err.response?.data?.ErrorMessage ===
                 'Configuration with the specified name was not found') {
             return {
@@ -4266,8 +4399,10 @@ function retryDestination(destinationName) {
                 return destination;
             }
             catch (error) {
-                const status = error?.response?.status;
-                if (status.toString().startsWith('4')) {
+                const status = (0, axios_1.isAxiosError)(error)
+                    ? error.response?.status
+                    : undefined;
+                if (status?.toString().startsWith('4')) {
                     bail(new util_1.ErrorWithCause(`Request failed with status code ${status}`, error));
                     // We need to return something here but the actual value does not matter
                     return undefined;
@@ -4496,7 +4631,7 @@ function parseCertificate(certificate) {
 function parseCertificates(destination) {
     return {
         ...destination,
-        certificates: (destination.certificates || []).map(certificate => parseCertificate(certificate))
+        certificates: (destination.certificates || []).map((certificate) => parseCertificate(certificate))
     };
 }
 function parseAuthToken(authToken) {
@@ -4511,7 +4646,7 @@ function parseAuthToken(authToken) {
 function parseAuthTokens(destination) {
     return {
         ...destination,
-        authTokens: (destination.authTokens || []).map(token => parseAuthToken(token))
+        authTokens: (destination.authTokens || []).map((token) => parseAuthToken(token))
     };
 }
 function setTrustAll(destination) {
@@ -5421,7 +5556,9 @@ function getServiceBindings(service) {
  * @returns The first found service.
  */
 function getServiceBinding(service) {
-    const services = xsenv.filterServices({ label: service });
+    const services = xsenv.filterServices({
+        label: service
+    });
     if (!services.length) {
         logger.warn(`Could not find service binding of type '${service}'. This might cause errors in other parts of the application.`);
     }
@@ -6136,7 +6273,7 @@ function audiencesFromAud({ aud }) {
     return makeArray(aud).map(audience => audience.split('.')[0]);
 }
 function audiencesFromScope({ scope }) {
-    return makeArray(scope).reduce((aud, s) => (s.includes('.') ? [...aud, s.split('.')[0]] : aud), []);
+    return makeArray(scope).reduce((aud, s) => s.includes('.') ? [...aud, s.split('.')[0]] : aud, []);
 }
 /**
  * Decode JWT.
@@ -6564,7 +6701,7 @@ function getUserToken(service, userJwt) {
             tenant: arg.zoneId ? undefined : arg.subdomain,
             zid: arg.zoneId
         })
-            .then(token => token.access_token);
+            .then((token) => token.access_token);
     };
     return (0, internal_1.executeWithMiddleware)((0, resilience_1.resilience)(), {
         fn: xssecPromise,
@@ -6738,15 +6875,45 @@ function compress(options) {
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.csrf = csrf;
 exports.buildCsrfFetchHeaders = buildCsrfFetchHeaders;
 const url_1 = __nccwpck_require__(87016);
 const util_1 = __nccwpck_require__(9471);
-const axios_1 = __importDefault(__nccwpck_require__(87269));
+const axios_1 = __importStar(__nccwpck_require__(87269));
 const internal_1 = __nccwpck_require__(71426);
 const logger = (0, util_1.createLogger)('csrf-middleware');
 /**
@@ -6833,7 +7000,7 @@ async function makeCsrfRequest(requestConfig, options) {
         return findCsrfHeader(response.headers);
     }
     catch (error) {
-        if (findCsrfHeader(error.response?.headers)) {
+        if ((0, axios_1.isAxiosError)(error) && findCsrfHeader(error.response?.headers)) {
             return findCsrfHeader(error.response?.headers);
         }
         logger.warn(new util_1.ErrorWithCause(`Failed to get CSRF token from  URL: ${requestConfig.url}.`, error));
@@ -7681,6 +7848,10 @@ class OpenApiRequestBuilder {
     async execute(destination) {
         const response = await this.executeRaw(destination);
         if (isAxiosResponse(response)) {
+            if (Buffer.isBuffer(response.data)) {
+                const contentType = (0, util_1.pickValueIgnoreCase)(response.headers, 'content-type');
+                return new Blob([response.data], contentType ? { type: contentType } : undefined);
+            }
             return response.data;
         }
         throw new Error('Could not access response data. Response was not an axios response.');
@@ -7764,6 +7935,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.circuitBreakerDefaultOptions = exports.circuitBreakers = void 0;
 exports.circuitBreaker = circuitBreaker;
 const opossum_1 = __importDefault(__nccwpck_require__(16195));
+const axios_1 = __nccwpck_require__(87269);
 /**
  * Map of all existing circuit breakers.
  * Entries are added in a lazy way.
@@ -7785,7 +7957,9 @@ exports.circuitBreakerDefaultOptions = {
     cache: false
 };
 function httpErrorFilter(error) {
-    return (!!error.response?.status && error.response.status.toString().startsWith('4'));
+    return ((0, axios_1.isAxiosError)(error) &&
+        !!error.response?.status &&
+        error.response.status.toString().startsWith('4'));
 }
 function circuitBreakerKeyBuilder({ uri, tenantId = 'tenant_id' }) {
     return `${uri}::${tenantId}`;
@@ -7994,6 +8168,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.retry = retry;
 const util_1 = __nccwpck_require__(9471);
 const asyncRetry = __importStar(__nccwpck_require__(45195));
+const axios_1 = __nccwpck_require__(87269);
 const logger = (0, util_1.createLogger)({
     package: 'resilience',
     messageContext: 'retry'
@@ -8015,7 +8190,9 @@ function retry(retries = defaultRetries) {
             }
             catch (error) {
                 // Don't retry on error statuses where a second attempt won't help
-                const status = error?.response?.status;
+                const status = (0, axios_1.isAxiosError)(error)
+                    ? error.response?.status
+                    : undefined;
                 if (!status) {
                     logger.debug('HTTP request failed but error did not contain a response status field as expected. Rethrowing error.');
                 }
@@ -8484,7 +8661,7 @@ class ErrorWithCause extends Error {
         this.addStack(cause);
     }
     isAxiosError(err) {
-        return err['isAxiosError'] === true;
+        return 'isAxiosError' in err && err.isAxiosError === true;
     }
     addStack(cause) {
         // Axios removed the stack property in version 0.27 which gave no useful information anyway. This adds the http cause.
