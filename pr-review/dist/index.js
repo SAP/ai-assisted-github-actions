@@ -10632,16 +10632,34 @@ class ResponseCache {
     static get DEFAULT_EXPIRATION_TIME() { return 30 * 60 * 1000; } // 30 minutes
     static get DEFAULT_REFRESH_PERIOD() { return 15 * 60 * 1000; } // 15 minutes
 
-    /** @type {Map<string,ResponseReplica>} */
-    cache; // map that stores response replicas by their key
+    /**
+     * @type {Map<string,{data:*,lastRefresh:number}>|import("../util/Types").Cache}
+     * The persistent key-value store. Holds only serializable snapshots `{ data, lastRefresh }`, so a custom impl
+     * (e.g. a distributed cache like Redis) never has to store functions or reconstructed domain objects.
+     */
+    store;
+    /**
+     * @type {Map<string,ResponseReplica>}
+     * Process-local map of transient replicas holding the request callback, the in-flight refresh promise and the
+     * memoized reconstructed value. Never written to the custom impl.
+     */
+    #replicas;
     endpointName; // name of cached endpoint for logging purposes, e.g. "JWKS", ".well-known" etc.
     expirationTime; // expiration time that will be used for new cache entries
     refreshPeriod; // time before expiration in which a response is considered stale
 
+    /**
+     * @param {object} [options]
+     * @param {number} [options.expirationTime] time in ms since last refresh until an entry counts as expired
+     * @param {number} [options.refreshPeriod] time in ms before expiration in which an entry counts as stale
+     * @param {string} [options.endpointName] name of the cached endpoint for logging purposes
+     * @param {import("../util/Types").Cache} [options.impl] custom cache used as the persistent store instead of the default in-memory Map
+     */
     constructor({
         expirationTime = ResponseCache.DEFAULT_EXPIRATION_TIME,
         refreshPeriod = ResponseCache.DEFAULT_REFRESH_PERIOD,
-        endpointName = "response"
+        endpointName = "response",
+        impl
     } = {}) {
         if (expirationTime < 0) {
             throw new ConfigurationError("ResponseCache expirationTime must be >=0.")
@@ -10651,7 +10669,10 @@ class ResponseCache {
             throw new ConfigurationError("ResponseCache refreshPeriod must be between 0 and <expirationTime>.")
         }
 
-        this.cache = new Map();
+        // A custom cache impl only provides the key-value storage of serializable snapshots { data, lastRefresh };
+        // the expiration/background-refresh logic and the reconstruction of domain objects stay inside this process.
+        this.store = impl ?? new Map();
+        this.#replicas = new Map();
         this.endpointName = endpointName;
         this.expirationTime = expirationTime;
         this.refreshPeriod = refreshPeriod;
@@ -10663,27 +10684,44 @@ class ResponseCache {
      * @param key cache key of response
      * @param buildRequest callback that constructs a request function for fetching new responses if no replica exists yet for the key. The request function
      *  has to throw an Error with a statusCode and statusText if it fails to fetch the data.
+     * @param {object} options
+     * @param {string} [options.correlationId] correlation id for logging and outgoing requests
+     * @param {function(*):*} [options.deserialize] optional callback that reconstructs the domain object (e.g. a Jwks instance) from the raw
+     *  serializable data returned by the request. The result is memoized per refresh. If omitted, the raw data is returned as is.
      */
-    async getOrRequest(key, buildRequest, { correlationId }) {
-        const replica = this.cache.get(key) || this.#createReplica(key, buildRequest());
+    async getOrRequest(key, buildRequest, { correlationId, deserialize } = {}) {
+        let replica = this.#replicas.get(key);
+        if (!replica) {
+            replica = new ResponseReplica(this, key, buildRequest(), deserialize);
+            this.#replicas.set(key, replica);
+        }
 
-        if (!replica.hasData() || replica.isExpired()) {
-            // await synchronous response refresh if replica response data is missing or expired
-            LOG.debug(`Awaiting ${this.endpointName} refresh because replica for key=${key} has ${replica.hasData() ? "expired" : "no"} data.)`, { correlationId });
-            await replica.refresh(correlationId);
-        } else if (replica.isStale(this.refreshPeriod)) {
-            // trigger asynchronous response refresh in background if replica is stale
-            LOG.debug(`Asynchronous ${this.endpointName} refresh scheduled because replica for key=${key} is stale (remaining time = ${replica.remainingTime}ms < ${replica.refreshPeriod}ms = refresh period).`);
+        // read the snapshot once; only await if the store is an asynchronous (promise-based) custom cache impl,
+        // so a synchronous store (e.g. the default Map) introduces no extra microtask and behaves exactly as before
+        let snapshot = this.store.get(key);
+        if (snapshot && typeof snapshot.then === "function") {
+            snapshot = await snapshot;
+        }
+
+        if (!replica.hasData(snapshot) || replica.isExpired(snapshot)) {
+            // await synchronous response refresh if snapshot data is missing or expired
+            LOG.debug(`Awaiting ${this.endpointName} refresh because replica for key=${key} has ${replica.hasData(snapshot) ? "expired" : "no"} data.)`, { correlationId });
+            snapshot = await replica.refresh(correlationId);
+        } else if (replica.isStale(snapshot, this.refreshPeriod)) {
+            // trigger asynchronous response refresh in background if snapshot is stale
+            LOG.debug(`Asynchronous ${this.endpointName} refresh scheduled because replica for key=${key} is stale (remaining time = ${replica.remainingTime(snapshot)}ms < ${this.refreshPeriod}ms = refresh period).`);
             replica.refresh(correlationId).catch(() => { }); // silently catch rejected promise to prevent uncaught rejection errors
         }
 
-        return replica.data;
+        return replica.resolve(snapshot);
     }
 
-    #createReplica(key, request) {
-        const replica = new ResponseReplica(this, key, request);
-        this.cache.set(key, replica);
-        return replica;
+    /**
+     * Clears all cached entries: both the persistent snapshots in the store and the transient in-process replicas.
+     */
+    async clear() {
+        this.#replicas.clear();
+        await this.store.clear();
     }
 }
 
@@ -10698,52 +10736,64 @@ class ResponseReplica {
     cache; // cache containing this replica
     key; // cache key of this replica
     request; // callback for fetching response data
-    data; // last response data
-    lastRefresh; // UNIX timestamp of last refresh
+    deserialize; // optional callback that reconstructs the domain object from the raw stored data
     expirationTime; // time in milliseconds that needs to pass after creation for the replica to count as expired
     pendingRequest; // promise for ongoing update of response or undefined
 
-    constructor(cache, key, request) {
-        Object.assign(this, { cache, key, request });
-        this.data = null;
+    #reconstructed; // memoized result of deserialize(snapshot.data)
+    #reconstructedAt; // lastRefresh timestamp for which #reconstructed was built
+
+    /**
+     * @param {import("./ResponseCache")} cache the owning cache
+     * @param {string} key cache key of this replica
+     * @param {function(string):Promise<*>} request callback for fetching new (raw, serializable) response data
+     * @param {function(*):*} [deserialize] optional callback reconstructing the domain object from the raw stored data
+     */
+    constructor(cache, key, request, deserialize) {
+        Object.assign(this, { cache, key, request, deserialize });
         this.expirationTime = cache.expirationTime;
     }
 
     /**
-     * Returns the remaining time until expiration.
+     * Returns the remaining time until expiration for the given snapshot.
+     * The snapshot is passed in (rather than read here) so that reads from a potentially asynchronous store happen
+     * only once per access in {@link ResponseCache.getOrRequest}.
+     * @param {{data:*,lastRefresh:number}} [snapshot] the current snapshot from the store
      * @returns time until expiration or 0 if no data available or data expired
      */
-    get remainingTime() {
-        if (!this.hasData || this.lastRefresh == null) {
+    remainingTime(snapshot) {
+        if (!snapshot || snapshot.lastRefresh == null) {
             return 0;
         }
 
-        const elapsedTime = Date.now() - this.lastRefresh;
+        const elapsedTime = Date.now() - snapshot.lastRefresh;
         return Math.max(0, this.expirationTime - elapsedTime);
     }
 
-    /** Returns whether the replica already has response data. **/
-    hasData() {
-        return this.data != null;
+    /** Returns whether the given snapshot already has response data. **/
+    hasData(snapshot) {
+        return snapshot != null && snapshot.data != null;
     }
 
-    /** Returns whether the replica is expired. **/
-    isExpired() {
-        return this.remainingTime <= 0;
+    /** Returns whether the given snapshot is expired. **/
+    isExpired(snapshot) {
+        return this.remainingTime(snapshot) <= 0;
     }
 
     /**
-     * Returns if the replica is considered stale given the refresh period. Stale replicas should be refreshed but may still be used before expiration.
-     * @param refreshPeriod time period (in ms) before expiration time in which the replica should count as stale (but not yet as expired)
-     * @returns true if the replica is already expired or will expire within the given refresh period.
+     * Returns if the given snapshot is considered stale for the refresh period. Stale snapshots should be refreshed but may still be used before expiration.
+     * @param {{data:*,lastRefresh:number}} [snapshot] the current snapshot from the store
+     * @param refreshPeriod time period (in ms) before expiration time in which the snapshot should count as stale (but not yet as expired)
+     * @returns true if the snapshot is already expired or will expire within the given refresh period.
      */
-    isStale(refreshPeriod) {
-        return this.expired || this.remainingTime <= refreshPeriod;
+    isStale(snapshot, refreshPeriod) {
+        return this.isExpired(snapshot) || this.remainingTime(snapshot) <= refreshPeriod;
     }
 
     /**
      * Triggers a refresh of this replica. Multiple calls will still result in only one refresh at a time.
-     * @param {string} correlationId 
+     * @param {string} correlationId
+     * @returns {Promise<{data:*,lastRefresh:number}>} the newly stored snapshot
      */
     refresh(correlationId) {
         this.pendingRequest ??= this.#fetchResponse(correlationId);
@@ -10751,19 +10801,50 @@ class ResponseReplica {
         return this.pendingRequest;
     }
 
-    /** Fetches new data from the request. */
+    /**
+     * Reconstructs the up-to-date response from the given snapshot. If a deserialize callback was provided, the raw stored
+     * data is reconstructed into the domain object (e.g. a Jwks instance) and memoized until the next refresh. Otherwise the raw data is returned.
+     * @param {{data:*,lastRefresh:number}} [snapshot] the current snapshot from the store
+     */
+    resolve(snapshot) {
+        if (!snapshot) {
+            return null;
+        }
+
+        if (!this.deserialize) {
+            return snapshot.data;
+        }
+
+        // reconstruct only once per refresh to avoid rebuilding the domain object on every access
+        if (this.#reconstructedAt !== snapshot.lastRefresh) {
+            this.#reconstructed = this.deserialize(snapshot.data);
+            this.#reconstructedAt = snapshot.lastRefresh;
+        }
+
+        return this.#reconstructed;
+    }
+
+    /** Fetches new (raw, serializable) data from the request and stores it as a snapshot in the persistent store. */
     async #fetchResponse(correlationId) {
+        let data;
         try {
-            this.data = await this.request(correlationId);
+            data = await this.request(correlationId);
         } finally {
             this.pendingRequest = null;
         }
 
-        this.lastRefresh = Date.now();
+        const snapshot = { data, lastRefresh: Date.now() };
+        // only await if the store is an asynchronous (promise-based) custom cache impl
+        const setResult = this.cache.store.set(this.key, snapshot);
+        if (setResult && typeof setResult.then === "function") {
+            await setResult;
+        }
+        return snapshot;
     }
 }
 
 module.exports = ResponseReplica;
+
 
 /***/ }),
 
@@ -11313,7 +11394,7 @@ class XsuaaLegacyExtension {
         });
 
         /** @type {XsuaaSecurityContext|null|undefined} */
-        const cachedXsuaaContext = this.cache?.get(cacheKey);
+        const cachedXsuaaContext = await this.cache?.get(cacheKey);
         if (cachedXsuaaContext) {
             if (cachedXsuaaContext.token.remainingTime >= 300) {
                 // tokens with a minimum remaining time of 5 minutes may be returned from cache
@@ -11322,7 +11403,7 @@ class XsuaaLegacyExtension {
             } else {
                 // remove almost expired token from cache
                 LOG.debug?.(`Removing almost expired cached XsuaaSecurityContext for IAS token with app_tid='${iasToken.appTid}', jti='${iasToken.payload.jti}', ias_iss='${iasToken.issuer}'.`);
-                this.cache.set(cacheKey, null);
+                await this.cache.set(cacheKey, null);
             }
         }
         
@@ -11342,7 +11423,7 @@ class XsuaaLegacyExtension {
             skipValidation: true // token fetched from XsuaaService can be trusted
         });
 
-        this.cache?.set(cacheKey, xsuaaContext);
+        await this.cache?.set(cacheKey, xsuaaContext);
         return xsuaaContext;
     }
 
@@ -11634,13 +11715,23 @@ async function createSecurityContext(services, contextConfig) {
 
 /**
  * Tries to find a service from the list for which the given token was issued based on logic implemented by individual subclasses of {@link Service}.
- * @param {Service[]} services 
- * @param {Token} token 
+ * A service whose {@link Service#acceptsTokenAudience} throws is treated as declining the token, so that a single
+ * throwing service cannot abort the selection of the remaining services (e.g. IAS-primary + XSUAA-fallback).
+ * @param {Service[]} services
+ * @param {Token} token
  * @returns {Service|undefined}
  */
 function findServiceForToken(services, token) {
-    // TODO: extend with heuristic to filter on XSUAA/IAS services to prevent false positive?
-    return services.find(s => s.acceptsTokenAudience(token));
+    for (const service of services) {
+        try {
+            if (service.acceptsTokenAudience(token)) {
+                return service;
+            }
+        } catch (error) {
+            LOG.debug(`${service.constructor.name} declined the token during service selection: ${error.message}`);
+        }
+    }
+    return undefined;
 }
 
 /***/ }),
@@ -12450,7 +12541,6 @@ const availableHashes = crypto.getHashes();
 class Jwk {
     key; // key information from JWKS response
     pubKey; // Node.Js crypto public key
-    nodeAlg; // alg as Node.Js crypto name, e.g. RSA-SHA256
 
     /**
      * Creates a JWK based on a jwk-formatted public key
@@ -12503,30 +12593,54 @@ class Jwk {
 
     /**
      * Validates if the token was signed with the private key that belongs to this public key without using a cache.
-     * @param {Token} token 
+     * @param {Token} token
      * @returns {boolean} true if the signature is valid, false otherwise
      */
     validateSignatureWithoutCache(token) {
-        const nodeAlg = Jwk.mapAlgToNodeAlg(token.header.alg);
-        if (!availableHashes.includes(nodeAlg)) {
+        const algInfo = Jwk.mapAlg(token.header.alg);
+        if (algInfo == null || !availableHashes.includes(algInfo.hash)) {
             throw new UnsupportedAlgorithmError(token, token.header.alg);
         }
 
         const [header, payload, signature] = token.jwt.split(".");
 
-        const verifier = crypto.createVerify(nodeAlg);
+        const verifier = crypto.createVerify(algInfo.hash);
         verifier.update(`${header}.${payload}`);
-        return verifier.verify(this.pubKey, signature, 'base64');
+        return verifier.verify({ key: this.pubKey, ...algInfo.verifyOptions }, signature, 'base64');
     }
 
-    static mapAlgToNodeAlg(alg) {
+    /**
+     * Maps a JWS "alg" header value (RFC 7518) to the Node.js crypto hash name plus any verify options
+     * required to correctly verify a signature produced with that algorithm.
+     *
+     * For PS* the PSS padding with salt length equal to the hash length (RFC 7518 §3.5) must be set explicitly,
+     * otherwise Node.js verifies as PKCS#1 v1.5 and PS signatures fail.
+     * For ES* the JWS raw R||S signature encoding must be selected via dsaEncoding='ieee-p1363',
+     * since Node.js defaults to DER encoding.
+     *
+     * @param {string} alg JWS "alg" header value
+     * @returns {{ hash: string, verifyOptions?: object } | null} algorithm info, or null if unsupported
+     */
+    static mapAlg(alg) {
         switch (alg?.toUpperCase()) {
             case "RS256":
-                return "RSA-SHA256";
+                return { hash: "RSA-SHA256" };
             case "RS384":
-                return "RSA-SHA384";
+                return { hash: "RSA-SHA384" };
             case "RS512":
-                return "RSA-SHA512";
+                return { hash: "RSA-SHA512" };
+            case "PS256":
+                return { hash: "RSA-SHA256", verifyOptions: { padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST } };
+            case "PS384":
+                return { hash: "RSA-SHA384", verifyOptions: { padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST } };
+            case "PS512":
+                return { hash: "RSA-SHA512", verifyOptions: { padding: crypto.constants.RSA_PKCS1_PSS_PADDING, saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST } };
+            case "ES256":
+                return { hash: "sha256", verifyOptions: { dsaEncoding: "ieee-p1363" } };
+            case "ES384":
+                return { hash: "sha384", verifyOptions: { dsaEncoding: "ieee-p1363" } };
+            case "ES512":
+                return { hash: "sha512", verifyOptions: { dsaEncoding: "ieee-p1363" } };
             default:
                 return null;
         }
@@ -12696,7 +12810,7 @@ const { parsePemCertificate } = __nccwpck_require__(45146);
 const createCacheKey = __nccwpck_require__(83488);
 const { escapeStringForRegex } = __nccwpck_require__(50301);
 const { jsonRequest } = __nccwpck_require__(8562);
-const { APP_TID_HEADER, AZP_HEADER, CLIENT_CERTIFICATE_HEADER, CLIENTID_HEADER, HTTPS_SCHEME, SERVICE_PLAN_HEADER, X5T_CNF_CLAIM } = __nccwpck_require__(95492);
+const { APP_TID_HEADER, AZP_HEADER, AZP_APP_TID_HEADER, CLIENT_CERTIFICATE_HEADER, CLIENTID_HEADER, HTTPS_SCHEME, SERVICE_PLAN_HEADER, X5T_CNF_CLAIM } = __nccwpck_require__(95492);
 const Token = __nccwpck_require__(4511);
 const XsuaaLegacyExtension = __nccwpck_require__(79591);
 
@@ -12809,7 +12923,8 @@ class IdentityService extends Service {
         const jwksParams = {
             clientid: this.credentials.clientid,
             app_tid: token.appTid,
-            azp: token.azp
+            azp: token.azp,
+            azp_app_tid: token.azpAppTid
         }
         const keyParts = { url: issuerUrl, ...jwksParams };
 
@@ -12829,8 +12944,9 @@ class IdentityService extends Service {
             return async (correlationId) => {
                 const jwksResponse = await issuerService.fetchJwks(jwksParams, { correlationId, extractHeaders });
 
+                // return only the raw, serializable data; the Jwks instance is reconstructed via deserialize
                 return {
-                    jwks: new Jwks(jwksResponse.keys),
+                    keys: jwksResponse.keys,
                     servicePlans: proofTokenCheck ? jwksResponse.headers.get(SERVICE_PLAN_HEADER)?.split(",").map(plan => plan.replaceAll("\"", "")) : null
                 };
             }
@@ -12838,7 +12954,10 @@ class IdentityService extends Service {
 
         let cachedResponse;
         try {
-            cachedResponse = await this.jwksCache.getOrRequest(cacheKey, buildJwksRequest, { correlationId: contextConfig.correlationId });
+            cachedResponse = await this.jwksCache.getOrRequest(cacheKey, buildJwksRequest, {
+                correlationId: contextConfig.correlationId,
+                deserialize: (raw) => ({ jwks: new Jwks(raw.keys), servicePlans: raw.servicePlans })
+            });
         } catch (error) {
             if (error instanceof ResponseError && error.responseCode === 400 && error.request.name === `${this.constructor.name}.fetchJwks`) {
                 /**
@@ -12860,7 +12979,7 @@ class IdentityService extends Service {
         return jwks;
     }
 
-    async fetchJwks({ clientid, app_tid, azp, clientCertificatePem }, { correlationId, extractHeaders }) {
+    async fetchJwks({ clientid, app_tid, azp, azp_app_tid, clientCertificatePem }, { correlationId, extractHeaders }) {
         const openIDConfiguration = await this.getOpenIDConfiguration({ correlationId });
         const jwksUrl = openIDConfiguration.jwks_uri;
 
@@ -12877,6 +12996,10 @@ class IdentityService extends Service {
 
         if (azp != null) {
             request.headers[AZP_HEADER] = azp;
+        }
+
+        if (azp_app_tid != null) {
+            request.headers[AZP_APP_TID_HEADER] = azp_app_tid;
         }
 
         if (clientCertificatePem != null) {
@@ -12980,7 +13103,7 @@ class IdentityService extends Service {
             jti: validatedToken.payload.jti
         });
         
-        let idTokenJwt = this.idTokenCache.get(cacheKey);
+        let idTokenJwt = await this.idTokenCache.get(cacheKey);
         if (idTokenJwt) {
             const cachedToken = new IdentityServiceToken(idTokenJwt);
             if (cachedToken.remainingTime >= 300) {
@@ -12988,12 +13111,12 @@ class IdentityService extends Service {
                 return idTokenJwt;
             } else {
                 // remove almost expired token from cache
-                this.idTokenCache.set(cacheKey, null);
+                await this.idTokenCache.set(cacheKey, null);
             }
         }
 
         idTokenJwt = await this.#fetchIdToken(validatedToken, options);
-        this.idTokenCache.set(cacheKey, idTokenJwt);
+        await this.idTokenCache.set(cacheKey, idTokenJwt);
         return idTokenJwt;
     }
 
@@ -13101,12 +13224,12 @@ class IdentityService extends Service {
 
     /**
      * Returns whether a proof token check has to be done for the given token.
-     * The decision depends on the type of token.
-     * Tokens with claim ias_api are App2App tokens for which a proof token check must not be done, even when enabled via the configuration.
+     * The specification is to not enforce the check for single-audience tokens because there are
+     * single-audience token flows (App-to-App, Service-to-App) in which mTLS is impractical and the additional validation is not needed.
      * @param {IdentityServiceToken} token 
      */
     #proofTokenCheckRequired(token) {
-        return this.hasProofTokenEnabled() && token.payload.ias_apis == null;
+        return this.hasProofTokenEnabled() && token.audiences.length > 1;
     }
 
     /** 
@@ -13355,7 +13478,10 @@ class Service {
      */
     get jwksCache() {
         if (!this.#jwksCache) {
-            this.#jwksCache = this.config.validation.jwks.shared ? this.#getSharedJwksCache(this.config) : new ResponseCache({ ...this.config.validation.jwks, endpointName: "JWKS" });
+            // A custom cache impl is externally managed, so it is not shared internally per Service type.
+            this.#jwksCache = this.config.validation.jwks.shared && !this.config.validation.jwks.impl
+                ? this.#getSharedJwksCache(this.config)
+                : new ResponseCache({ ...this.config.validation.jwks, endpointName: "JWKS" });
         }
         return this.#jwksCache;
     }
@@ -13428,6 +13554,9 @@ class Service {
 
     /**
      * Checks if this service is the recipient of the given token.
+     * A missing audience is treated as "not for this service" (returns false) rather than a hard error,
+     * so that this method can be safely used as a predicate to select a service from a list of candidates
+     * without a throwing service aborting the selection of subsequent services (see {@link createSecurityContext}).
      * @param {Token} token
      * @returns {Boolean}
      */
@@ -13436,7 +13565,7 @@ class Service {
 
         const audiences = token.audiences;
         if(audiences == null) {
-            throw new WrongAudienceError(token, this, "Token is missing an audience which is required to validate whether this client may use it.");
+            return false;
         }
 
         return audiences.includes(this.credentials.clientid);
@@ -13642,21 +13771,21 @@ class Service {
      * @returns {Promise<TokenFetchResponse>} response
      */
     async #getOrFetchToken(cacheKey, fetchToken) {
-        const cachedEntry = this.tokenFetchCache.get(cacheKey);
+        const cachedEntry = await this.tokenFetchCache.get(cacheKey);
         if (cachedEntry) {
             const { response, expiresAt } = cachedEntry;
             const remainingSeconds = (expiresAt - Date.now()) / 1000;
-            
+
             if (remainingSeconds > Service.DEFAULT_TOKEN_CACHE_LEEWAY) {
                 return response;
             }
         }
 
         const response = await fetchToken();
-        
+
         const expiresAt = Date.now() + (response.expires_in * 1000);
-        this.tokenFetchCache.set(cacheKey, { response, expiresAt });
-        
+        await this.tokenFetchCache.set(cacheKey, { response, expiresAt });
+
         return response;
     }
 
@@ -14246,13 +14375,17 @@ class XsuaaService extends Service {
         const buildJwksRequest = () => {
             return async (correlationId) => {
                 const jwksResponse = await this.fetchJwks(jwksParams, correlationId);
-                return new Jwks(jwksResponse.keys);
+                // return only the raw, serializable data; the Jwks instance is reconstructed via deserialize
+                return { keys: jwksResponse.keys };
             }
         }
 
         let jwks;
         try {
-            jwks = await this.jwksCache.getOrRequest(cacheKey, buildJwksRequest, { correlationId: contextConfig.correlationId });
+            jwks = await this.jwksCache.getOrRequest(cacheKey, buildJwksRequest, {
+                correlationId: contextConfig.correlationId,
+                deserialize: (raw) => new Jwks(raw.keys)
+            });
         } catch (error) {
             if (error instanceof ResponseError && error.responseCode === 400) {
                 /**
@@ -14419,6 +14552,14 @@ class IdentityServiceToken extends Token {
      */
     get appTid() {
         return this.payload.app_tid ?? this.payload.zone_uuid;
+    }
+
+    /**
+     * @returns {string} The app_tid of the SAP Cloud Identity Service application identified by the token's `azp` claim (authorized party).
+     * In app2app flows this is the tenant of the sender app, which can differ from {@link appTid} (the receiver's tenant).
+     */
+    get azpAppTid() {
+        return this.payload.azp_app_tid;
     }
 
     /**
@@ -15012,9 +15153,10 @@ module.exports = Logger;
 
 /**
  * @typedef {object} JwksConfig
- * @property {boolean} [shared=false] if true, shares the JWKS cache with the first instance of the same Service type that was created with this flag set to true, otherwise creates a new JWKS cache for each instance
+ * @property {boolean} [shared=false] if true, shares the JWKS cache with the first instance of the same Service type that was created with this flag set to true, otherwise creates a new JWKS cache for each instance. Ignored when a custom impl is provided, since a custom cache is managed externally.
  * @property {number} [expirationTime=1800000] time in *ms* since last refresh until a JWK counts as expired which requires a synchronous refresh on the next validation using this JWK
  * @property {number} [refreshPeriod=900000] time in *ms* since last refresh until a JWK counts as stale which triggers an asynchronous refresh in the background on the next validation using this JWK
+ * @property {import("../util/Types").Cache} [impl] a custom cache instance used as the persistent key-value store instead of the default in-memory Map. The impl only ever stores serializable snapshots of the form `{ data, lastRefresh }` (plain JSON), so it can be backed by a distributed store (e.g. Redis) shared across processes. The JWK expiration/background-refresh behavior (expirationTime/refreshPeriod), request deduplication and the reconstruction of the Jwks object are retained internally, regardless of the impl used. The get/set methods may be synchronous or asynchronous (Promise-based).
  */
 
 /**
@@ -15081,8 +15223,10 @@ module.exports = Logger;
 
 /**
  * @typedef {object} Cache A cache object that can be used to store and retrieve values via set and get methods.
- * @property {function} set Sets the value of the given key in the cache.
- * @property {function} get Retrieves the value of the given key from the cache.
+ * The methods may be synchronous or return a Promise (async), e.g. to back the cache with a distributed store like Redis.
+ * The library awaits both get and set, so either style works.
+ * @property {function(string,*): (void|Promise<void>)} set Sets the value of the given key in the cache.
+ * @property {function(string): (*|Promise<*>)} get Retrieves the value of the given key from the cache.
  */
 
 
@@ -15169,6 +15313,7 @@ module.exports = Logger;
 /**
  * @typedef {object} IdentityServiceJwtPayload
  * @property {string} [app_tid] The ID of the caller's tenant within the SAP Cloud Identity Service application for which the token was fetched.
+ * @property {string} [azp_app_tid] The app_tid of the SAP Cloud Identity Service application identified by the `azp` claim (authorized party). In app2app flows this is the sender's tenant, which can differ from `app_tid` (the receiver's tenant).
  * @property {string[]} [ias_apis] SAP Cloud Identity Service APIs consumed by the caller
  * @property {"app"|"user"} [sap_id_type] ID Type of principal
  * @property {string} [scim_id] SCIM ID
@@ -15400,6 +15545,7 @@ function unquoteAndDecodeCert(certValue) {
 module.exports = {
     APP_TID_HEADER: "x-app_tid",
     AZP_HEADER: "x-azp",
+    AZP_APP_TID_HEADER: "x-azp_app_tid",
     CLIENT_CERTIFICATE_HEADER : "x-client_cert",
     CLIENTID_HEADER: "x-client_id",
     CORRELATIONID_HEADER_VCAP: "x-vcap-request-id",
