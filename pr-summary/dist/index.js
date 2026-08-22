@@ -154321,16 +154321,7 @@ class OrchestrationClient {
     config;
     deploymentConfig;
     destination;
-    /**
-     * Creates an instance of the orchestration client.
-     * @param config - Orchestration configuration. Can be:
-     * - An `OrchestrationModuleConfig` object for inline configuration
-     * - An `OrchestrationModuleConfigList` array for module fallback (tries each config in order until one succeeds)
-     * - A JSON string obtained from AI Launchpad
-     * - An object of type`OrchestrationConfigRef` to reference a stored configuration by ID or name.
-     * @param deploymentConfig - Deployment configuration.
-     * @param destination - The destination to use for the request.
-     */
+    /* eslint-enable @typescript-eslint/unified-signatures */
     constructor(config, deploymentConfig, destination) {
         this.config = config;
         this.deploymentConfig = deploymentConfig;
