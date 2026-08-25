@@ -2274,15 +2274,18 @@ exports.defaultAgentOptions = {
 };
 /**
  * Builds a secret-free cache key input for the agent cache.
- * For direct destinations the agent is fully defined by its protocol, TLS options and
- * optional `agentOptions`. For the on-premise connectivity proxy all requests share the
- * same proxy origin, so keep-alive sockets would otherwise be reused across Cloud
- * Connector tunnels. To prevent this, the key is additionally scoped by the location ID,
- * the proxy host/port and the propagated principal (derived from stable, non-secret JWT
- * claims).
+ * For non-OnPremise destinations the agent is fully defined by its protocol, TLS
+ * options and optional `agentOptions` - auth headers are sent per request, so
+ * sharing keep-alive sockets is safe.
+ * For OnPremise destinations all keep-alive sockets are Cloud Connector tunnels
+ * through the same connectivity proxy origin, bound to the subaccount, location
+ * ID, target system and propagated principal of their first request. The key is
+ * therefore scoped by all of these dimensions (derived from stable, non-secret
+ * JWT claims). If any dimension cannot be derived, caching is skipped entirely
+ * instead of risking cross-context socket reuse.
  * @param destination - Destination to derive the cache key dimensions from.
  * @param options - TLS/agent options that define the agent instance.
- * @returns A plain object to be hashed into the agent cache key.
+ * @returns A plain object to be hashed into the agent cache key, or `undefined` to skip caching.
  */
 function getAgentCacheKeyInput(destination, options) {
     const protocol = (0, get_protocol_1.getProtocolOrDefault)(destination);
@@ -2291,40 +2294,81 @@ function getAgentCacheKeyInput(destination, options) {
         options,
         agentOptions: destination.agentOptions
     };
-    if (destination.proxyType === 'OnPremise') {
-        keyInput.cloudConnectorLocationId = destination.cloudConnectorLocationId;
-        keyInput.proxyHost = destination.proxyConfiguration?.host;
-        keyInput.proxyPort = destination.proxyConfiguration?.port;
-        const principal = getPrincipalCacheKey(destination);
+    if (destination.proxyType !== 'OnPremise') {
+        return keyInput;
+    }
+    const proxyAuth = getProxyAuthCacheKey(destination);
+    const principal = getPrincipalCacheKey(destination);
+    if (
+    // Without a subaccount scope tunnels could be reused across subaccounts.
+    proxyAuth.status !== 'derived' ||
+        // A present but unusable user token means we cannot scope the principal.
+        principal.status === 'invalid' ||
         // PrincipalPropagation binds the Cloud Connector tunnel to the propagated
         // user. Without a stable userId we cannot derive a safe cache key and must
         // skip caching to avoid reusing a tunnel across principals.
-        if (destination.authentication === 'PrincipalPropagation' &&
-            !principal?.userId) {
-            return undefined;
-        }
-        // For all other OnPremise flows the principal is not strictly required, but
-        // we still scope by full available principal information for better cache isolation.
-        if (principal) {
-            keyInput.principal = principal;
-        }
+        (destination.authentication === 'PrincipalPropagation' &&
+            (principal.status !== 'derived' || !principal.scope.userId))) {
+        return undefined;
+    }
+    keyInput.cloudConnectorLocationId = destination.cloudConnectorLocationId;
+    keyInput.proxyHost = destination.proxyConfiguration?.host;
+    keyInput.proxyPort = destination.proxyConfiguration?.port;
+    // destination.url is the base URL, so it is a stable cache-key source.
+    keyInput.target = destination.url;
+    keyInput.proxyAuth = proxyAuth.scope;
+    // For all other OnPremise flows the principal is not strictly required, but
+    // we still scope by full available principal information for better cache isolation.
+    if (principal.status === 'derived') {
+        keyInput.principal = principal.scope;
     }
     return keyInput;
+}
+/**
+ * Derives a stable subaccount scope from the `Proxy-Authorization` header, so
+ * that keep-alive tunnels are not reused across subaccounts. The connectivity
+ * service JWT is decoded and reduced to the stable, non-secret claims
+ * `tenantId` (subaccount) and `clientId`, because the raw token rotates on
+ * every refresh and must never be part of a cache key. `clientId` is taken
+ * from that JWT rather than `destination.clientId`, because the JWT reflects
+ * the assumed identity.
+ * @param destination - Destination carrying the proxy configuration.
+ * @returns The derivation outcome for the subaccount scope.
+ */
+function getProxyAuthCacheKey(destination) {
+    const authHeader = destination.proxyConfiguration?.headers?.['Proxy-Authorization'];
+    if (!authHeader) {
+        return { status: 'absent' };
+    }
+    const bearerMatch = authHeader.match(/^Bearer (.+)$/i);
+    if (!bearerMatch) {
+        return { status: 'invalid' };
+    }
+    try {
+        const decoded = (0, jwt_1.decodeJwt)(bearerMatch[1]);
+        const tenantId = (0, jwt_1.getTenantId)(decoded);
+        const clientId = decoded.clientid;
+        if (!tenantId && !clientId) {
+            return { status: 'invalid' };
+        }
+        return { status: 'derived', scope: { tenantId, clientId } };
+    }
+    catch {
+        return { status: 'invalid' };
+    }
 }
 /**
  * Derives a stable, non-secret identity scope for OnPremise destinations from
  * the propagated JWT. The raw token must not be part of the cache key, because
  * it is a secret and rotates on every refresh. `userId` and `tenantId` are
  * stable claims that scope the cache entry to a principal.
- * PrincipalPropagation flows require a `userId`; other flows include the
- * principal only when a user token is present.
  * @param destination - Destination carrying the propagated principal JWT.
- * @returns A stable identity scope, or `undefined` if no usable token is present.
+ * @returns The derivation outcome for the principal scope.
  */
 function getPrincipalCacheKey(destination) {
     const authHeader = destination.proxyConfiguration?.headers?.['SAP-Connectivity-Authentication'];
     if (!authHeader) {
-        return undefined;
+        return { status: 'absent' };
     }
     const encoded = authHeader.replace(/^Bearer /i, '');
     try {
@@ -2332,13 +2376,12 @@ function getPrincipalCacheKey(destination) {
         const tenantId = (0, jwt_1.getTenantId)(decoded);
         const userId = (0, jwt_1.userId)(decoded);
         if (!tenantId && !userId) {
-            return undefined;
+            return { status: 'invalid' };
         }
-        return { userId, tenantId };
+        return { status: 'derived', scope: { userId, tenantId } };
     }
     catch {
-        // A malformed token must not break agent creation; fall back to location/host scoping.
-        return undefined;
+        return { status: 'invalid' };
     }
 }
 async function getAgentCacheKey(destination, options) {
@@ -2349,11 +2392,14 @@ async function getAgentCacheKey(destination, options) {
     }
     return (0, cache_1.hashCacheKey)(cacheKeyInput);
 }
-function createAgentImpl(destination, options) {
+function createAgentImpl(destination, options, willBeCached) {
     const protocol = (0, get_protocol_1.getProtocolOrDefault)(destination);
     logger.debug(`Creating new ${protocol.toUpperCase()} agent for destination ${destination.name || '<unknown>'}`);
     const optionsWithDefaults = {
         ...exports.defaultAgentOptions,
+        // Disable keep-alive for agents that will not be cached,
+        // as there will be no chance to reuse sockets.
+        ...(!willBeCached ? { keepAlive: false } : {}),
         ...destination.agentOptions,
         ...options
     };
@@ -2370,10 +2416,10 @@ async function createAgent(destination, options) {
     const cacheKey = await getAgentCacheKey(destination, options);
     if (!cacheKey) {
         logger.info(`Could not derive a cache key for destination ${destination.name || '<unknown>'}. Creating a new agent without caching.`);
-        return createAgentImpl(destination, options);
+        return createAgentImpl(destination, options, false);
     }
     return exports.agentCache.getOrInsertComputed(cacheKey, () => ({
-        entry: createAgentImpl(destination, options)
+        entry: createAgentImpl(destination, options, true)
     }));
 }
 /**
@@ -4225,7 +4271,7 @@ exports.fetchCertificate = fetchCertificate;
 exports.fetchDestinationWithTokenRetrieval = fetchDestinationWithTokenRetrieval;
 const util_1 = __nccwpck_require__(9471);
 const axios_1 = __importStar(__nccwpck_require__(87269));
-const internal_1 = __nccwpck_require__(71426);
+const internal_1 = __nccwpck_require__(83759);
 const resilience_1 = __nccwpck_require__(57816);
 const async_retry_1 = __importDefault(__nccwpck_require__(45195));
 const jwt_1 = __nccwpck_require__(90837);
@@ -5848,7 +5894,7 @@ exports.identityServicesCache = void 0;
 exports.shouldExchangeToken = shouldExchangeToken;
 exports.fetchIasToken = fetchIasToken;
 exports.getIasAppTid = getIasAppTid;
-const internal_1 = __nccwpck_require__(71426);
+const internal_1 = __nccwpck_require__(83759);
 const resilience_1 = __nccwpck_require__(57816);
 const xssec_1 = __nccwpck_require__(3324);
 const util_1 = __nccwpck_require__(9471);
@@ -6643,7 +6689,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getClientCredentialsToken = getClientCredentialsToken;
 exports.getUserToken = getUserToken;
-const internal_1 = __nccwpck_require__(71426);
+const internal_1 = __nccwpck_require__(83759);
 const resilience_1 = __nccwpck_require__(57816);
 const environment_accessor_1 = __nccwpck_require__(85055);
 const jwt_1 = __nccwpck_require__(90837);
@@ -6715,28 +6761,6 @@ function getUserToken(service, userJwt) {
     });
 }
 //# sourceMappingURL=xsuaa-service.js.map
-
-/***/ }),
-
-/***/ 88492:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-function __export(m) {
-  for (const p in m) {
-    if (!exports.hasOwnProperty(p)) {
-      exports[p] = m[p];
-    }
-  }
-}
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-/**
- * @packageDocumentation
- * @experimental The internal module is related to sdk-metadata types which are used only internally.
- */
-__export(__nccwpck_require__(23085));
-// # sourceMappingURL=internal.js.map
-
 
 /***/ }),
 
@@ -6914,7 +6938,7 @@ exports.buildCsrfFetchHeaders = buildCsrfFetchHeaders;
 const url_1 = __nccwpck_require__(87016);
 const util_1 = __nccwpck_require__(9471);
 const axios_1 = __importStar(__nccwpck_require__(87269));
-const internal_1 = __nccwpck_require__(71426);
+const internal_1 = __nccwpck_require__(83759);
 const logger = (0, util_1.createLogger)('csrf-middleware');
 /**
  * Middleware for fetching a CSRF token. This middleware is added to all request per default.
@@ -7148,8 +7172,8 @@ exports.getDefaultHttpRequestOptions = getDefaultHttpRequestOptions;
 const http = __importStar(__nccwpck_require__(58611));
 const https = __importStar(__nccwpck_require__(65692));
 const connectivity_1 = __nccwpck_require__(88498);
-const internal_1 = __nccwpck_require__(88492);
-const internal_2 = __nccwpck_require__(71426);
+const internal_1 = __nccwpck_require__(23085);
+const internal_2 = __nccwpck_require__(83759);
 const util_1 = __nccwpck_require__(9471);
 const axios_1 = __importDefault(__nccwpck_require__(87269));
 const http_client_types_1 = __nccwpck_require__(31503);
@@ -7388,13 +7412,38 @@ function executeHttpRequestWithOrigin(destination, requestConfig, options) {
     });
 }
 async function buildDestinationHttpRequestConfig(destination, headers) {
+    const beforeRedirect = getProxyHeadersBeforeRedirect(destination);
     return {
         baseURL: destination.url,
         headers,
         params: destination.queryParameters,
         proxy: (0, internal_1.getProxyConfig)(destination),
+        ...(beforeRedirect && { beforeRedirect }),
         ...(await (0, connectivity_1.getAgentConfig)(destination))
     };
+}
+function getProxyHeadersBeforeRedirect(destination) {
+    const proxyHeaders = destination.proxyConfiguration?.headers;
+    if (!Object.keys(proxyHeaders || {}).length) {
+        return undefined;
+    }
+    return options => {
+        if (!isSameOriginRedirect(options.href, destination.url)) {
+            return;
+        }
+        Object.assign(options.headers ?? (options.headers = {}), proxyHeaders);
+    };
+}
+function isSameOriginRedirect(targetUrl, sourceUrl) {
+    if (!targetUrl || !sourceUrl) {
+        return false;
+    }
+    try {
+        return new URL(targetUrl).origin === new URL(sourceUrl).origin;
+    }
+    catch {
+        return false;
+    }
 }
 async function buildHeaders(destination) {
     try {
@@ -7593,28 +7642,6 @@ __exportStar(__nccwpck_require__(36298), exports);
 
 /***/ }),
 
-/***/ 4525:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-function __export(m) {
-  for (const p in m) {
-    if (!exports.hasOwnProperty(p)) {
-      exports[p] = m[p];
-    }
-  }
-}
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-/**
- * @packageDocumentation
- * @experimental The internal module is related to sdk-metadata types which are used only internally.
- */
-__export(__nccwpck_require__(11030));
-// # sourceMappingURL=internal.js.map
-
-
-/***/ }),
-
 /***/ 97823:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -7642,9 +7669,9 @@ exports.OpenApiRequestBuilder = void 0;
 /* eslint-disable max-classes-per-file */
 const util_1 = __nccwpck_require__(9471);
 const connectivity_1 = __nccwpck_require__(88498);
-const internal_1 = __nccwpck_require__(88492);
+const internal_1 = __nccwpck_require__(23085);
 const http_client_1 = __nccwpck_require__(36063);
-const internal_2 = __nccwpck_require__(4525);
+const internal_2 = __nccwpck_require__(11030);
 const logger = (0, util_1.createLogger)({
     package: 'openapi',
     messageContext: 'openapi-request-builder'
@@ -7739,7 +7766,9 @@ class FormDataBuilder {
         // Handle string data
         // Only use JSON.stringify for application/json content type - otherwise may unduly escape e.g. stringified XML
         // To avoid stringifying pre-stringified JSON, users should use `Blob` or raw `FormData`
-        const stringValue = allowedTypes.has('application/json')
+        const stringValue = allowedTypes
+            .values()
+            .some(val => val === 'application/json' || val.endsWith('+json'))
             ? JSON.stringify(value)
             : String(value);
         // If a charset is specified in the encoding, we encode the string accordingly (if unambiguous)
@@ -8267,28 +8296,6 @@ async function wrapInTimeout(promise, timeoutValue, message) {
     return Promise.race([withClearTimeout, timeoutPromise]);
 }
 //# sourceMappingURL=timeout.js.map
-
-/***/ }),
-
-/***/ 71426:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-function __export(m) {
-  for (const p in m) {
-    if (!exports.hasOwnProperty(p)) {
-      exports[p] = m[p];
-    }
-  }
-}
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-/**
- * @packageDocumentation
- * @experimental The internal module is related to sdk-metadata types which are used only internally.
- */
-__export(__nccwpck_require__(83759));
-// # sourceMappingURL=internal.js.map
-
 
 /***/ }),
 
@@ -153859,8 +153866,6 @@ const TenantInfoApi = {
 
 
 //# sourceMappingURL=index.js.map
-// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/internal.js
-var internal = __nccwpck_require__(88492);
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/model.js
 function isFoundationModel(model) {
     return typeof model === 'object' && 'name' in model;
@@ -153894,6 +153899,7 @@ function model_translateToFoundationModel(modelConfig) {
 }
 //# sourceMappingURL=model.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-cache.js
+Object(function webpackMissingModule() { var e = new Error("Cannot find module '@sap-cloud-sdk/connectivity/internal.js'"); e.code = 'MODULE_NOT_FOUND'; throw e; }());
 
 
 
@@ -153968,7 +153974,7 @@ function transformDeploymentForCache(deployment) {
  * Cache for deployments.
  * @internal
  */
-const deployment_cache_deploymentCache = createDeploymentCache(new internal.Cache(5 * 60 * 1000) // 5 minutes
+const deployment_cache_deploymentCache = createDeploymentCache(new Object(function webpackMissingModule() { var e = new Error("Cannot find module '@sap-cloud-sdk/connectivity/internal.js'"); e.code = 'MODULE_NOT_FOUND'; throw e; }())(5 * 60 * 1000) // 5 minutes
 );
 //# sourceMappingURL=deployment-cache.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-resolver.js
