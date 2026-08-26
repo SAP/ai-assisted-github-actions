@@ -153862,6 +153862,8 @@ const TenantInfoApi = {
 
 
 //# sourceMappingURL=index.js.map
+// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/dist/internal.js
+var internal = __nccwpck_require__(23085);
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/model.js
 function isFoundationModel(model) {
     return typeof model === 'object' && 'name' in model;
@@ -153895,7 +153897,6 @@ function model_translateToFoundationModel(modelConfig) {
 }
 //# sourceMappingURL=model.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-cache.js
-Object(function webpackMissingModule() { var e = new Error("Cannot find module '@sap-cloud-sdk/connectivity/internal.js'"); e.code = 'MODULE_NOT_FOUND'; throw e; }());
 
 
 
@@ -153970,7 +153971,7 @@ function transformDeploymentForCache(deployment) {
  * Cache for deployments.
  * @internal
  */
-const deployment_cache_deploymentCache = createDeploymentCache(new Object(function webpackMissingModule() { var e = new Error("Cannot find module '@sap-cloud-sdk/connectivity/internal.js'"); e.code = 'MODULE_NOT_FOUND'; throw e; }())(5 * 60 * 1000) // 5 minutes
+const deployment_cache_deploymentCache = createDeploymentCache(new internal.Cache(5 * 60 * 1000) // 5 minutes
 );
 //# sourceMappingURL=deployment-cache.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-resolver.js
