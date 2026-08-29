@@ -133113,25 +133113,102 @@ function isRecursive(inst, stack) {
             result = true;
     };
     const def = inst._zod.def;
-    if (def.type === "lazy") {
-        check(inst._zod.innerType);
-    }
-    else {
-        // $ZodObject redefines `shape` as a non-enumerable accessor, so `for...in` misses it.
-        const shape = def.shape;
-        // `for...in` skips symbols, so a cycle through a declared symbol key would read as non-recursive
-        if (shape)
-            for (const key of Reflect.ownKeys(shape))
-                check(shape[key]);
-        for (const key in def) {
-            const value = def[key];
-            if (!value || typeof value !== "object")
-                continue;
-            if (value._zod)
-                check(value);
-            else if (Array.isArray(value))
-                for (const el of value)
-                    check(el);
+    const kind = def.type;
+    switch (kind) {
+        case "object": {
+            // `Reflect.ownKeys` rather than `Object.keys`, so a cycle through a declared symbol key is still seen
+            for (const key of Reflect.ownKeys(def.shape))
+                check(def.shape[key]);
+            check(def.catchall);
+            break;
+        }
+        case "array":
+            check(def.element);
+            break;
+        case "tuple":
+            for (const el of def.items)
+                check(el);
+            check(def.rest);
+            break;
+        case "record":
+        case "map":
+            check(def.keyType);
+            check(def.valueType);
+            break;
+        case "set":
+            check(def.valueType);
+            break;
+        case "union":
+            for (const el of def.options)
+                check(el);
+            break;
+        case "intersection":
+            check(def.left);
+            check(def.right);
+            break;
+        case "optional":
+        case "nullable":
+        case "default":
+        case "prefault":
+        case "catch":
+        case "readonly":
+        case "nonoptional":
+        case "promise":
+        case "success":
+            check(def.innerType);
+            break;
+        case "pipe":
+            check(def.in);
+            check(def.out);
+            break;
+        case "function":
+            check(def.input);
+            check(def.output);
+            break;
+        // reading `_zod.innerType` resolves the getter once and caches it
+        case "lazy":
+            check(inst._zod.innerType);
+            break;
+        // a leaf by choice: `parts` are regex fragments, not data positions
+        case "template_literal":
+        // leaves
+        case "string":
+        case "number":
+        case "int":
+        case "boolean":
+        case "bigint":
+        case "symbol":
+        case "undefined":
+        case "null":
+        case "void":
+        case "never":
+        case "any":
+        case "unknown":
+        case "date":
+        case "nan":
+        case "enum":
+        case "literal":
+        case "file":
+        case "transform":
+        case "custom":
+            break;
+        default: {
+            // a new built-in kind becomes a compile error here
+            kind;
+            // a user-defined kind can still hold children, and only its author knows where, so fall back to scanning the def — skipping accessors, since reading one can run user code
+            for (const key in def) {
+                const desc = Object.getOwnPropertyDescriptor(def, key);
+                if (!desc || desc.get)
+                    continue;
+                const value = desc.value;
+                if (!value || typeof value !== "object")
+                    continue;
+                if (value._zod)
+                    check(value);
+                else if (Array.isArray(value))
+                    for (const el of value)
+                        check(el);
+            }
         }
     }
     stack.delete(inst);
@@ -134475,7 +134552,7 @@ const safeDecodeAsync = /* @__PURE__*/ _safeDecodeAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 5,
-    patch: 2,
+    patch: 4,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -138117,6 +138194,7 @@ function initializeContext(params) {
         cycles: params?.cycles ?? "ref",
         reused: params?.reused ?? "inline",
         intersections: [],
+        deferred: [],
         external: params?.external ?? undefined,
     };
 }
@@ -138550,6 +138628,8 @@ function finalize(ctx, schema) {
                 compactTypeUnion(entry[1].def ?? entry[1].schema);
             }
         }
+        for (const rewrite of ctx.deferred)
+            rewrite();
         // After flattening, every member that was extracted is a `$ref`, so the fold sees the final shape. A schema that inherits an intersection — through `z.lazy`, or any `ref` chain — holds the same `allOf` array, so fold by array identity to catch every copy.
         if (ctx.intersections.length) {
             const carriers = new Map();
@@ -138727,6 +138807,7 @@ const createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params)
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/json-schema-processors.js
 
 
+
 const formatMap = {
     guid: "uuid",
     url: "uri",
@@ -138757,12 +138838,12 @@ const stringProcessor = (schema, ctx, _json, _params) => {
     if (contentEncoding)
         json.contentEncoding = contentEncoding;
     if (patterns && patterns.size > 0) {
-        const regexes = [...patterns];
-        if (regexes.length === 1)
-            json.pattern = regexes[0].source;
-        else if (regexes.length > 1) {
+        const patternList = [...patterns];
+        if (patternList.length === 1)
+            json.pattern = patternList[0].source;
+        else if (patternList.length > 1) {
             json.allOf = [
-                ...regexes.map((regex) => ({
+                ...patternList.map((regex) => ({
                     ...(ctx.target === "draft-07" || ctx.target === "draft-04" || ctx.target === "openapi-3.0"
                         ? { type: "string" }
                         : {}),
@@ -139156,6 +139237,87 @@ const tupleProcessor = (schema, ctx, _json, params) => {
     if (typeof maximum === "number")
         json.maxItems = maximum;
 };
+/** JSON object keys are always strings, so a numeric record key schema is re-expressed over the
+ * numeric-string form the record parser matches. Deferred to `finalize`, after the flatten: a key
+ * behind a wrapper only carries its own `type` before then, and a union key only has its branches.
+ *
+ * A numeric bound cannot apply to a property name, so `minimum` and its siblings are dropped rather
+ * than carried over: keeping them beside `type: "string"` reproduces the match-nothing schema this
+ * exists to fix. A key that carries one therefore emits wider than the record parses — `z.record(z.number().min(5), V)`
+ * accepts `"3"` — which is the deliberate trade, since throwing on it would reject an ordinary schema
+ * outright. */
+function stringifyKeyNames(bySchema, json, visited) {
+    // an extracted key that rewrites cannot go on sharing its definition — the string form a key position needs is not the number form every other reference wants — so it inlines. One that does not rewrite keeps the `$ref`.
+    if (json.$ref) {
+        // a recursive key holds its own reference inside its definition, so a node already on the path is left alone rather than resolved again
+        if (visited.has(json))
+            return json;
+        visited.add(json);
+        const def = bySchema.get(json)?.def;
+        if (!def)
+            return json;
+        const inlined = stringifyKeyNames(bySchema, def, visited);
+        return inlined === def ? json : inlined;
+    }
+    for (const keyword of ["anyOf", "oneOf"]) {
+        const branches = json[keyword];
+        if (!Array.isArray(branches))
+            continue;
+        const mapped = branches.map((branch) => stringifyKeyNames(bySchema, branch, visited));
+        // rebuilding regardless would detach a key that had nothing to re-express, dropping its `$ref` and leaking the internal `id`
+        if (mapped.some((branch, i) => branch !== branches[i]))
+            json = { ...json, [keyword]: mapped };
+    }
+    // a member that already admits a string leaves the key unconstrained, so the node's own type re-expresses only when every member is numeric
+    const types = Array.isArray(json.type) ? json.type : [json.type];
+    const numericType = !types.includes("string") && types.some((t) => t === "number" || t === "integer");
+    // a heterogeneous key carries no type at all, so its numeric members are caught here instead
+    const values = json.enum ?? (json.const !== undefined ? [json.const] : undefined);
+    if (!numericType && !values?.some((v) => typeof v === "number"))
+        return json;
+    const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, format, id, ...rest } = json;
+    if (rest.enum)
+        rest.enum = rest.enum.map((v) => (typeof v === "number" ? String(v) : v));
+    else if (typeof rest.const === "number")
+        rest.const = String(rest.const);
+    // a heterogeneous key keeps its absent type: the stringified members already say what a key may be
+    if (!numericType)
+        return rest;
+    rest.type = "string";
+    if (!values)
+        rest.pattern = (types.includes("number") ? number : integer).source;
+    return rest;
+}
+/** Every record of one conversion, so the carriers are found in a single pass rather than once per record. */
+const pendingRecords = new WeakMap();
+function rewriteKeyNames(ctx) {
+    // an extracted key is resolved by the object `extractToDef` left in its place, so the map is built once rather than searched per reference. `_zod.toJSONSchema` can hand the same object to two schemas, so the first entry carrying a body wins, as a search would have found it.
+    const bySchema = new Map();
+    for (const entry of ctx.seen.values()) {
+        if (entry.def && !bySchema.has(entry.schema))
+            bySchema.set(entry.schema, entry);
+    }
+    const rewrites = new Map();
+    for (const record of pendingRecords.get(ctx) ?? []) {
+        const seen = ctx.seen.get(record);
+        const names = (seen?.def ?? seen?.schema)?.propertyNames;
+        if (!names || names === true || rewrites.has(names))
+            continue;
+        const rewritten = stringifyKeyNames(bySchema, names, new Set());
+        if (rewritten !== names)
+            rewrites.set(names, rewritten);
+    }
+    if (!rewrites.size)
+        return;
+    // the flatten has already copied each record's own properties onto every wrapper by reference, and an extracted body is another such copy, so every carrier holding a rewritten key is updated together
+    for (const entry of ctx.seen.values()) {
+        for (const carrier of [entry.schema, entry.def]) {
+            const rewritten = carrier && rewrites.get(carrier.propertyNames);
+            if (rewritten)
+                carrier.propertyNames = rewritten;
+        }
+    }
+}
 const recordProcessor = (schema, ctx, _json, params) => {
     const json = _json;
     const def = schema._zod.def;
@@ -139182,6 +139344,13 @@ const recordProcessor = (schema, ctx, _json, params) => {
                 ...params,
                 path: [...params.path, "propertyNames"],
             });
+            let pending = pendingRecords.get(ctx);
+            if (!pending) {
+                pending = [];
+                pendingRecords.set(ctx, pending);
+                ctx.deferred.push(() => rewriteKeyNames(ctx));
+            }
+            pending.push(schema);
         }
         json.additionalProperties = to_json_schema_process(def.valueType, ctx, {
             ...params,
@@ -139195,7 +139364,7 @@ const recordProcessor = (schema, ctx, _json, params) => {
     if (keyValues && !def.partial && !omittableOnInput) {
         const validKeyValues = [...keyValues].filter((v) => typeof v === "string" || typeof v === "number");
         if (validKeyValues.length > 0) {
-            json.required = validKeyValues;
+            json.required = validKeyValues.map(String);
         }
     }
 };
