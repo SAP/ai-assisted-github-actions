@@ -132839,7 +132839,8 @@ function defineBound(proto, key, fn) {
     Object.defineProperty(proto, key, {
         configurable: true,
         get() {
-            return own(this, key, fn.bind(this));
+            // vitest's spyOn calls a prototype getter bare to find the function it wraps, so a nullish receiver answers the raw method
+            return this == null ? fn : own(this, key, fn.bind(this));
         },
         set(value) {
             own(this, key, value);
@@ -134474,7 +134475,7 @@ const safeDecodeAsync = /* @__PURE__*/ _safeDecodeAsync($ZodRealError);
 const version = {
     major: 4,
     minor: 5,
-    patch: 1,
+    patch: 2,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -139732,7 +139733,7 @@ const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
     },
     // `spa` is an alias: same function object as `safeParseAsync`, as before.
     get spa() {
-        return this.safeParseAsync;
+        return this?.safeParseAsync;
     },
     set spa(value) {
         own(this, "spa", value);
@@ -139761,11 +139762,8 @@ const ZodType = /*@__PURE__*/ $constructor("ZodType", (inst, def) => {
     async safeDecodeAsync(data, params) {
         return parse_safeDecodeAsync(this, data, params);
     },
-    get toJSONSchema() {
-        return own(this, "toJSONSchema", createToJSONSchemaMethod(this, {}));
-    },
-    set toJSONSchema(value) {
-        own(this, "toJSONSchema", value);
+    toJSONSchema(params) {
+        return createToJSONSchemaMethod(this, {})(params);
     },
     // Reads through to the registry on every access, so it must not cache.
     get description() {
