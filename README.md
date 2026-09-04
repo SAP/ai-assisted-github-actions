@@ -1,5 +1,6 @@
 [![REUSE status](https://api.reuse.software/badge/github.com/SAP/ai-assisted-github-actions)](https://api.reuse.software/info/github.com/SAP/ai-assisted-github-actions)
 
+
 # AI-assisted GitHub Actions
 
 _Automate your PR workflow with GitHub Actions powered by SAP AI Core. Get instant summaries and reviews—no more manual grunt work._
