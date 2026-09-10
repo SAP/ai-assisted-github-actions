@@ -134103,7 +134103,7 @@ class Doc {
 const version = {
     major: 4,
     minor: 6,
-    patch: 1,
+    patch: 2,
 };
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/schemas.js
@@ -134978,7 +134978,7 @@ function handlePropertyResult(result, final, key, input, optin, optout) {
         return;
     }
     if (result.value === undefined) {
-        if (isPresent) {
+        if (isPresent || (optin === "defaulted" && !isOptionalOut)) {
             final.value[key] = undefined;
         }
     }
@@ -135233,16 +135233,17 @@ const $ZodObjectJIT = /*@__PURE__*/ $constructor("$ZodObjectJIT", (inst, def) =>
                 doc.write(`
         if (${id}.issues.length) {${prefixStr(id, k)}
         }
-        
-        if (${id}.value === undefined) {
-          if (${isPresent}) {
-            newResult[${k}] = undefined;
-          }
-        } else {
+      `);
+                if (optin === "defaulted") {
+                    doc.write(`newResult[${k}] = ${id}.value;`);
+                }
+                else {
+                    doc.write(`
+        if (${id}.value !== undefined || ${isPresent}) {
           newResult[${k}] = ${id}.value;
         }
-
       `);
+                }
             }
         }
         doc.write(`payload.value = newResult;`);
