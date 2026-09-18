@@ -149256,6 +149256,15 @@ const context_logger = (0,util_dist.createLogger)({
     package: 'core',
     messageContext: 'context'
 });
+// Default HTTP agent socket timeout for AI Core requests (1,200s + 1s leeway), overriding the
+// Cloud SDK default of 5s, which is too short for chat/streaming completions.
+const DEFAULT_AGENT_TIMEOUT = 1_200_000 + 1e3;
+// Disabled so the long timeout above does not keep stale pooled sockets alive past
+// a load balancer's idle timeout, which would cause ECONNRESET on reuse.
+// TODO: revisit if we switch HTTP library (e.g. undici / a fetch adapter), which can
+// isolate the idle free-socket timeout from the active-request timeout and make
+// keep-alive safe here.
+const DEFAULT_AGENT_KEEP_ALIVE = false;
 let aiCoreServiceBinding;
 /**
  * Returns a destination object.
@@ -149288,7 +149297,14 @@ async function getAiCoreDestination(destination) {
     const aiCoreDestination = (await (0,connectivity_dist.transformServiceBindingToDestination)(aiCoreServiceBinding, {
         useCache: true
     }));
-    return aiCoreDestination;
+    return {
+        ...aiCoreDestination,
+        agentOptions: {
+            keepAlive: DEFAULT_AGENT_KEEP_ALIVE,
+            timeout: DEFAULT_AGENT_TIMEOUT,
+            ...aiCoreDestination.agentOptions
+        }
+    };
 }
 function getAiCoreServiceKeyFromEnv() {
     const credentials = parseServiceKeyFromEnv(process.env['AICORE_SERVICE_KEY']);
@@ -149361,7 +149377,12 @@ function mergeWithDefaultRequestConfig(apiVersion, resourceGroup, requestConfig)
             'content-type': 'application/json',
             'ai-resource-group': resourceGroup
         },
-        params: apiVersion ? { 'api-version': apiVersion } : {}
+        params: apiVersion ? { 'api-version': apiVersion } : {},
+        // Do not cap request/response size for AI Core: prompts and completions can be
+        // large. No-op on the current http adapter (axios defaults both to -1 = unlimited),
+        // but keeps the intent explicit and safe under a fetch adapter.
+        maxContentLength: Number.POSITIVE_INFINITY,
+        maxBodyLength: Number.POSITIVE_INFINITY
     };
     const mergedHeaders = (0,util_dist.mergeIgnoreCase)(defaultConfig.headers, requestConfig?.headers);
     // merge 'ai-client-type' header value with custom client type if needed
@@ -149462,7 +149483,7 @@ class OpenApiRequestBuilder extends openapi_dist/* OpenApiRequestBuilder */.n {
  * Https://github.com/encode/httpx/blob/920333ea98118e9cf617f246905d7b202510941c/httpx/_decoders.py#L258.
  */
 class line_decoder_LineDecoder {
-    // prettier-ignore
+    // oxfmt-ignore
     static NEWLINE_CHARS = new Set(['\n', '\r']);
     static NEWLINE_REGEXP = /\r\n|[\n\r]/g;
     buffer;
@@ -149577,12 +149598,12 @@ class SSEDecoder {
             return null;
         }
         const [fieldname, _, value] = partition(line, ':');
-        const trimedValue = value.startsWith(' ') ? value.substring(1) : value;
+        const trimmedValue = value.startsWith(' ') ? value.substring(1) : value;
         if (fieldname === 'event') {
-            this.event = trimedValue;
+            this.event = trimmedValue;
         }
         else if (fieldname === 'data') {
-            this.data.push(trimedValue);
+            this.data.push(trimmedValue);
         }
         else {
             throw new Error(`Invalid SSE payload: ${line}`);
@@ -150607,6 +150628,1710 @@ class OrchestrationStream extends SseStream {
     }
 }
 //# sourceMappingURL=orchestration-stream.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/artifact-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ArtifactApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ArtifactApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of artifacts that matches the specified filter criteria.
+     * Filter criteria include scenario ID, execution ID, an artifact name, artifact kind, or artifact labels.
+     * Use top/skip parameters to paginate the result list.
+     * Search by substring of artifact name or description, if required.
+     *
+     * @param queryParameters - Object containing the following keys: scenarioId, executionId, name, kind, artifactLabelSelector, $top, $skip, $search, searchCaseInsensitive, $expand.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    artifactQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts', {
+        headerParameters,
+        queryParameters
+    }, ArtifactApi._defaultBasePath),
+    /**
+     * Register an artifact for use in a configuration, for example a model or a dataset.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    artifactCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/artifacts', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ArtifactApi._defaultBasePath),
+    /**
+     * Retrieve details for artifact with artifactId.
+     * @param artifactId - Artifact identifier
+     * @param queryParameters - Object containing the following keys: $expand.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    artifactGet: (artifactId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts/{artifactId}', {
+        pathParameters: { artifactId },
+        headerParameters,
+        queryParameters
+    }, ArtifactApi._defaultBasePath),
+    /**
+     * Retrieve  the number of available artifacts that match the specified filter criteria.
+     * Filter criteria include a scenarioId, executionId, an artifact name, artifact kind, or artifact labels.
+     * Search by substring of artifact name or description is also possible.
+     *
+     * @param queryParameters - Object containing the following keys: scenarioId, executionId, name, kind, $search, searchCaseInsensitive, artifactLabelSelector.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    artifactCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts/$count', {
+        headerParameters,
+        queryParameters
+    }, ArtifactApi._defaultBasePath)
+};
+//# sourceMappingURL=artifact-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/configuration-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ConfigurationApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ConfigurationApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of configurations. Filter results by scenario ID or a list of executable IDs.
+     * Search for configurations containing the search string as substring in the configuration name.
+     *
+     * @param queryParameters - Object containing the following keys: scenarioId, $top, $skip, executableIds, $search, searchCaseInsensitive, $expand.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    configurationQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations', {
+        headerParameters,
+        queryParameters
+    }, ConfigurationApi._defaultBasePath),
+    /**
+     * Create a new configuration linked to a specific scenario and executable for use in an execution
+     * or deployment.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    configurationCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/configurations', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ConfigurationApi._defaultBasePath),
+    /**
+     * Retrieve details for configuration with configurationId.
+     * @param configurationId - Configuration identifier
+     * @param queryParameters - Object containing the following keys: $expand.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    configurationGet: (configurationId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations/{configurationId}', {
+        pathParameters: { configurationId },
+        headerParameters,
+        queryParameters
+    }, ConfigurationApi._defaultBasePath),
+    /**
+     * Retrieve the number of available configurations that match the specified filter criteria.
+     * Filter criteria include a scenarioId or executableIdsList. Search by substring of configuration name is also possible.
+     *
+     * @param queryParameters - Object containing the following keys: scenarioId, $search, searchCaseInsensitive, executableIds.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    configurationCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations/$count', {
+        headerParameters,
+        queryParameters
+    }, ConfigurationApi._defaultBasePath)
+};
+//# sourceMappingURL=configuration-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/deployment-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'DeploymentApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const deployment_api_DeploymentApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of deployments that match the specified filter criteria.
+     * Filter criteria include a list of executableIds, a scenarioId, a configurationId, or a deployment status.
+     * With top/skip parameters it is possible to paginate the result list.
+     * With select parameter it is possible to select only status.
+     *
+     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, status, $top, $skip, $select.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments', {
+        headerParameters,
+        queryParameters
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Create a deployment using the configuration specified by configurationId after synchronously checking the
+     * correctness of the configuration.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/deployments', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Update status of multiple deployments. stop or delete multiple deployments.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentBatchModify: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/deployments', {
+        body,
+        headerParameters: {
+            'content-type': 'application/merge-patch+json',
+            ...headerParameters
+        }
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Retrieve details for execution with deploymentId.
+     * @param deploymentId - Deployment identifier
+     * @param queryParameters - Object containing the following keys: $select.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentGet: (deploymentId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/{deploymentId}', {
+        pathParameters: { deploymentId },
+        headerParameters,
+        queryParameters
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Update target status of a deployment to stop a deployment or change the configuration to be used by the
+     * deployment after synchronously checking the correctness of the configuration. A change of configuration is only
+     * allowed for RUNNING and PENDING deployments.
+     *
+     * @param deploymentId - Deployment identifier
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentModify: (deploymentId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/deployments/{deploymentId}', {
+        pathParameters: { deploymentId },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Mark deployment with deploymentId as deleted.
+     * @param deploymentId - Deployment identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentDelete: (deploymentId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/deployments/{deploymentId}', {
+        pathParameters: { deploymentId },
+        headerParameters
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Retrieve the number of available deployments. The number can be filtered by
+     * scenarioId, configurationId, executableIdsList or by deployment status.
+     *
+     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, status.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deploymentCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/$count', {
+        headerParameters,
+        queryParameters
+    }, deployment_api_DeploymentApi._defaultBasePath),
+    /**
+     * Retrieve logs of a deployment for getting insight into the deployment results or failures.
+     * @param deploymentId - Deployment identifier
+     * @param queryParameters - Object containing the following keys: $top, start, end, $order.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DeploymentsGetLogs: (deploymentId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/{deploymentId}/logs', {
+        pathParameters: { deploymentId },
+        headerParameters,
+        queryParameters
+    }, deployment_api_DeploymentApi._defaultBasePath)
+};
+//# sourceMappingURL=deployment-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/execution-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ExecutionApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ExecutionApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of executions that match the specified filter criteria.
+     * Filter criteria include a list of executableIds, a scenarioId, a configurationId, or a execution status.
+     * With top/skip parameters it is possible to paginate the result list.
+     * With select parameter it is possible to select only status.
+     *
+     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, executionScheduleId, status, $top, $skip, $select.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions', {
+        headerParameters,
+        queryParameters
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Create an execution using the configuration specified by configurationId.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/executions', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Patch multiple executions' status to stopped or deleted.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionBatchModify: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executions', {
+        body,
+        headerParameters: {
+            'content-type': 'application/merge-patch+json',
+            ...headerParameters
+        }
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Retrieve details for execution with executionId.
+     * @param executionId - Execution identifier
+     * @param queryParameters - Object containing the following keys: $select.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionGet: (executionId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/{executionId}', {
+        pathParameters: { executionId },
+        headerParameters,
+        queryParameters
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Update target status of the execution to stop an execution.
+     * @param executionId - Execution identifier
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionModify: (executionId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executions/{executionId}', {
+        pathParameters: { executionId },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Mark the execution with executionId as deleted.
+     * @param executionId - Execution identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionDelete: (executionId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/executions/{executionId}', {
+        pathParameters: { executionId },
+        headerParameters
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Retrieve the number of available executions. The number can be filtered by
+     * scenarioId, configurationId, executableIdsList or by execution status.
+     *
+     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, executionScheduleId, status.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/$count', {
+        headerParameters,
+        queryParameters
+    }, ExecutionApi._defaultBasePath),
+    /**
+     * Retrieve logs of an execution for getting insight into the execution results or failures.
+     * @param executionId - Execution identifier
+     * @param queryParameters - Object containing the following keys: $top, start, end, $order.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ExecutionsGetLogs: (executionId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/{executionId}/logs', {
+        pathParameters: { executionId },
+        headerParameters,
+        queryParameters
+    }, ExecutionApi._defaultBasePath)
+};
+//# sourceMappingURL=execution-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/execution-schedule-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ExecutionScheduleApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ExecutionScheduleApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of execution schedules that match the specified filter criteria.
+     * Filter criteria include executionScheduleStatus or a configurationId.
+     * With top/skip parameters it is possible to paginate the result list.
+     *
+     * @param queryParameters - Object containing the following keys: configurationId, status, $top, $skip.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules', {
+        headerParameters,
+        queryParameters
+    }, ExecutionScheduleApi._defaultBasePath),
+    /**
+     * Create an execution schedule using the configuration specified by configurationId, and schedule.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/executionSchedules', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ExecutionScheduleApi._defaultBasePath),
+    /**
+     * Retrieve details for execution schedule with executionScheduleId.
+     * @param executionScheduleId - Execution Schedule identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleGet: (executionScheduleId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules/{executionScheduleId}', {
+        pathParameters: { executionScheduleId },
+        headerParameters
+    }, ExecutionScheduleApi._defaultBasePath),
+    /**
+     * Update details of an execution schedule
+     * @param executionScheduleId - Execution Schedule identifier
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleModify: (executionScheduleId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executionSchedules/{executionScheduleId}', {
+        pathParameters: { executionScheduleId },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ExecutionScheduleApi._defaultBasePath),
+    /**
+     * Delete the execution schedule with executionScheduleId.
+     * @param executionScheduleId - Execution Schedule identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleDelete: (executionScheduleId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/executionSchedules/{executionScheduleId}', {
+        pathParameters: { executionScheduleId },
+        headerParameters
+    }, ExecutionScheduleApi._defaultBasePath),
+    /**
+     * Retrieve the number of scheduled executions. The number can be filtered by
+     * configurationId or executionScheduleStatus.
+     *
+     * @param queryParameters - Object containing the following keys: configurationId, status.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executionScheduleCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules/$count', {
+        headerParameters,
+        queryParameters
+    }, ExecutionScheduleApi._defaultBasePath)
+};
+//# sourceMappingURL=execution-schedule-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/scenario-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ScenarioApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ScenarioApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of all available scenarios.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    scenarioQuery: (headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios', {
+        headerParameters
+    }, ScenarioApi._defaultBasePath),
+    /**
+     * Retrieve details for a scenario specified by scenarioId.
+     * @param scenarioId - Scenario identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    scenarioGet: (scenarioId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}', {
+        pathParameters: { scenarioId },
+        headerParameters
+    }, ScenarioApi._defaultBasePath),
+    /**
+     * Retrieve a list of scenario versions based on the versions of executables
+     * available within that scenario.
+     *
+     * @param scenarioId - Scenario identifier
+     * @param queryParameters - Object containing the following keys: labelSelector.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    scenarioQueryVersions: (scenarioId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/versions', {
+        pathParameters: { scenarioId },
+        headerParameters,
+        queryParameters
+    }, ScenarioApi._defaultBasePath),
+    /**
+     * Retrieve information about all models available in LLM global scenario
+     * @param scenarioId - Scenario identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    scenarioQueryModels: (scenarioId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/models', {
+        pathParameters: { scenarioId },
+        headerParameters
+    }, ScenarioApi._defaultBasePath)
+};
+//# sourceMappingURL=scenario-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/executable-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ExecutableApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ExecutableApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of executables for a scenario. Filter by version ID, if required.
+     *
+     * @param scenarioId - Scenario identifier
+     * @param queryParameters - Object containing the following keys: versionId.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executableQuery: (scenarioId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/executables', {
+        pathParameters: { scenarioId },
+        headerParameters,
+        queryParameters
+    }, ExecutableApi._defaultBasePath),
+    /**
+     * Retrieve details about an executable identified by executableId belonging
+     * to a scenario identified by scenarioId.
+     *
+     * @param scenarioId - Scenario identifier
+     * @param executableId - Executable identifier
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    executableGet: (scenarioId, executableId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/executables/{executableId}', {
+        pathParameters: { scenarioId, executableId },
+        headerParameters
+    }, ExecutableApi._defaultBasePath)
+};
+//# sourceMappingURL=executable-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/meta-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'MetaApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const MetaApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Meta information about an implementation of AI API, describing its capabilities, limits and extensions
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    metaGet: () => new OpenApiRequestBuilder('get', '/lm/meta', {}, MetaApi._defaultBasePath)
+};
+//# sourceMappingURL=meta-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/metrics-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'MetricsApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const MetricsApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve metrics, labels, or tags according to filter conditions.
+     * One query parameter is mandatory, either execution ID or filter.
+     * Use up to 10 execution IDs in a query parameter.
+     * With top/skip parameters it is possible to paginate the result list.
+     *
+     * @param queryParameters - Object containing the following keys: $filter, executionIds, $select, tagFilters, $top, $skip.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    metricsFind: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/metrics', {
+        headerParameters,
+        queryParameters
+    }, MetricsApi._defaultBasePath),
+    /**
+     * Update or create metrics, tags, or labels associated with an execution.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    metricsPatch: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/metrics', {
+        body,
+        headerParameters: {
+            'content-type': 'application/merge-patch+json',
+            ...headerParameters
+        }
+    }, MetricsApi._defaultBasePath),
+    /**
+     * Delete metrics, tags, or labels associated with an execution.
+     * @param queryParameters - Object containing the following keys: executionId.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    metricsDelete: (queryParameters, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/metrics', {
+        headerParameters,
+        queryParameters
+    }, MetricsApi._defaultBasePath)
+};
+//# sourceMappingURL=metrics-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/kpi-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'KPIApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const KPIApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve the number of executions, artifacts, and deployments
+     * for each resource group, scenario, and executable. The columns to be returned can be specified in a query parameter.
+     *
+     * @param queryParameters - Object containing the following keys: $select.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kpiGet: (queryParameters) => new OpenApiRequestBuilder('get', '/analytics/kpis', {
+        queryParameters
+    }, KPIApi._defaultBasePath)
+};
+//# sourceMappingURL=kpi-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/file-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'FileApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const FileApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Endpoint for downloading file. The path must point to an individual file.
+     * @param path - path relative to the object store root URL in the secret
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    fileDownload: (path, headerParameters) => new OpenApiRequestBuilder('get', '/lm/dataset/files/{path}', {
+        pathParameters: { path },
+        headerParameters
+    }, FileApi._defaultBasePath),
+    /**
+     * Endpoint for uploading file. The maximum file size depends on the actual implementation
+     * but must not exceed 100MB. The actual file size limit can be obtained by querying
+     * the AI API Runtime Capabilities Endpoint and checking the limits in the section of the `fileUpload` extension.
+     *
+     *  Path cannot be a prefix, it must be a path to an object.
+     * Clients may group the objects in any manner they choose by specifying path prefixes.
+     *
+     * Allowed mime-types will be decided by the implementation.
+     * Content-Type header can be set to "application/octet-stream" but the implementation is responsible
+     * for detecting the actual mime type and checking against the allowed list of mime types.
+     * For security reasons, implementations cannot trust the mime type sent by the client.
+     *
+     * Example URLs:
+     * /files/dar/schemas/schema.json
+     * /files/icr/datasets/training/20201001/20201001-01.csv
+     * /files/icr/datasets/training/20201001/20201001-02.csv
+     * /files/mask-detection/training/mask-detection-20210301.tar.gz
+     * @param path - path relative to the object store root URL in the secret
+     * @param body - Body of the file upload request
+     * @param queryParameters - Object containing the following keys: overwrite.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    fileUpload: (path, body, queryParameters, headerParameters) => new OpenApiRequestBuilder('put', '/lm/dataset/files/{path}', {
+        pathParameters: { path },
+        body,
+        headerParameters: { 'content-type': '*/*', ...headerParameters },
+        queryParameters
+    }, FileApi._defaultBasePath),
+    /**
+     * Delete the file specified by the path parameter.
+     * @param path - path relative to the object store root URL in the secret
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    fileDelete: (path, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/dataset/files/{path}', {
+        pathParameters: { path },
+        headerParameters
+    }, FileApi._defaultBasePath)
+};
+//# sourceMappingURL=file-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/object-store-secret-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ObjectStoreSecretApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ObjectStoreSecretApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of metadata of the stored secrets.
+     *
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ObjectStoreSecretsQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/objectStoreSecrets', {
+        headerParameters,
+        queryParameters
+    }, ObjectStoreSecretApi._defaultBasePath),
+    /**
+     * Create a secret based on the configuration in the request body
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ObjectStoreSecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/objectStoreSecrets', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ObjectStoreSecretApi._defaultBasePath),
+    /**
+     * This retrieves the metadata of the stored secret which match the parameter objectStoreName.
+     * The fetched secret is constructed like objectStoreName-object-store-secret
+     * The base64 encoded field for the stored secret is not returned.
+     *
+     * @param objectStoreName - Name of the object store for the secret.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ObjectStoreSecretsGet: (objectStoreName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/objectStoreSecrets/{objectStoreName}', {
+        pathParameters: { objectStoreName },
+        headerParameters
+    }, ObjectStoreSecretApi._defaultBasePath),
+    /**
+     * Update a secret with name of objectStoreName if it exists.
+     *
+     * @param objectStoreName - Name of the object store for the secret.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ObjectStoreSecretsPatch: (objectStoreName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/objectStoreSecrets/{objectStoreName}', {
+        pathParameters: { objectStoreName },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ObjectStoreSecretApi._defaultBasePath),
+    /**
+     * Delete a secret with the name of objectStoreName if it exists.
+     * @param objectStoreName - Name of the object store for the secret.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ObjectStoreSecretsDelete: (objectStoreName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/objectStoreSecrets/{objectStoreName}', {
+        pathParameters: { objectStoreName },
+        headerParameters
+    }, ObjectStoreSecretApi._defaultBasePath)
+};
+//# sourceMappingURL=object-store-secret-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/secret-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'SecretApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const SecretApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Lists all secrets corresponding to tenant. This retrieves metadata only, not the secret data itself.
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4GenericSecretsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/secrets', {
+        headerParameters,
+        queryParameters
+    }, SecretApi._defaultBasePath),
+    /**
+     * Create a new generic secret in the corresponding resource group or at main tenant level.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4GenericSecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/secrets', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, SecretApi._defaultBasePath),
+    /**
+     * Retrieve a single generic secret. This retrieves metadata only, not the secret data itself.
+     * @param secretName - Path parameter.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4GenericSecretsGet: (secretName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/secrets/{secretName}', {
+        pathParameters: { secretName },
+        headerParameters
+    }, SecretApi._defaultBasePath),
+    /**
+     * Update secret credentials. Replace secret data with the provided data.
+     * @param secretName - Path parameter.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4GenericSecretsUpdate: (secretName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/secrets/{secretName}', {
+        pathParameters: { secretName },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, SecretApi._defaultBasePath),
+    /**
+     * Deletes the secret from provided resource group namespace
+     * @param secretName - Path parameter.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4GenericSecretsDelete: (secretName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/secrets/{secretName}', {
+        pathParameters: { secretName },
+        headerParameters
+    }, SecretApi._defaultBasePath)
+};
+//# sourceMappingURL=secret-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-group-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ResourceGroupApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ResourceGroupApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of resource groups for a given tenant.
+     *
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count, continueToken, labelSelector.
+     * @param headerParameters - Object containing the following keys: Authorization, Prefer.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcegroupsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceGroups', {
+        headerParameters,
+        queryParameters
+    }, ResourceGroupApi._defaultBasePath),
+    /**
+     * Create resource group to a given main tenant. The length of resource group id must be between 3 and 253.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcegroupsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/resourceGroups', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ResourceGroupApi._defaultBasePath),
+    /**
+     * Get a resource group of a given main tenant.
+     *
+     * @param resourceGroupId - Resource group identifier
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcegroupsGet: (resourceGroupId, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceGroups/{resourceGroupId}', {
+        pathParameters: { resourceGroupId },
+        headerParameters
+    }, ResourceGroupApi._defaultBasePath),
+    /**
+     * Replace some characteristics of the resource group, for instance labels.
+     *
+     * @param resourceGroupId - Resource group identifier
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcegroupsPatch: (resourceGroupId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/resourceGroups/{resourceGroupId}', {
+        pathParameters: { resourceGroupId },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ResourceGroupApi._defaultBasePath),
+    /**
+     * Delete a resource group of a given main tenant.
+     *
+     * @param resourceGroupId - Resource group identifier
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcegroupsDelete: (resourceGroupId, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/resourceGroups/{resourceGroupId}', {
+        pathParameters: { resourceGroupId },
+        headerParameters
+    }, ResourceGroupApi._defaultBasePath)
+};
+//# sourceMappingURL=resource-group-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ResourceApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ResourceApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Lists all hot spare nodes, used nodes and total nodes corresponding to tenant.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcesGet: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/resources/nodes', {
+        headerParameters
+    }, ResourceApi._defaultBasePath),
+    /**
+     * Set hot spare nodes corresponding to tenant at main tenant level.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourcesPatch: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/resources/nodes', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ResourceApi._defaultBasePath),
+    /**
+     * Lists all the instance types available in the cluster.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4InstanceTypesGet: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/resources/instanceTypes', {
+        headerParameters
+    }, ResourceApi._defaultBasePath)
+};
+//# sourceMappingURL=resource-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/repository-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'RepositoryApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const RepositoryApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of all GitOps repositories for a tenant.
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4RepositoriesGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/repositories', {
+        headerParameters,
+        queryParameters
+    }, RepositoryApi._defaultBasePath),
+    /**
+     * On-board a new GitOps repository as specified in the content payload
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4RepositoriesCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/repositories', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, RepositoryApi._defaultBasePath),
+    /**
+     * Retrieve the access details for a repository if it exists.
+     * @param repositoryName - Name of the repository
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4RepositoriesGet: (repositoryName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/repositories/{repositoryName}', {
+        pathParameters: { repositoryName },
+        headerParameters
+    }, RepositoryApi._defaultBasePath),
+    /**
+     * Update the referenced repository credentials to synchronize a repository.
+     *
+     * @param repositoryName - Name of the repository
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4RepositoriesUpdate: (repositoryName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/repositories/{repositoryName}', {
+        pathParameters: { repositoryName },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, RepositoryApi._defaultBasePath),
+    /**
+     * Remove a repository from GitOps.
+     * @param repositoryName - Name of the repository
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4RepositoriesDelete: (repositoryName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/repositories/{repositoryName}', {
+        pathParameters: { repositoryName },
+        headerParameters
+    }, RepositoryApi._defaultBasePath)
+};
+//# sourceMappingURL=repository-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/application-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ApplicationApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ApplicationApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Return all Argo CD application data objects.
+     *
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications', {
+        headerParameters,
+        queryParameters
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Create an ArgoCD application to synchronise a repository.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/applications', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Returns the ArgoCD application health and sync status.
+     *
+     * @param applicationName - Name of the ArgoCD application
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsGetStatus: (applicationName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications/{applicationName}/status', {
+        pathParameters: { applicationName },
+        headerParameters
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Retrieve the ArgoCD application details.
+     *
+     * @param applicationName - Name of the ArgoCD application
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsGet: (applicationName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications/{applicationName}', {
+        pathParameters: { applicationName },
+        headerParameters
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Update the referenced ArgoCD application to synchronize the repository.
+     *
+     * @param applicationName - Name of the ArgoCD application
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsUpdate: (applicationName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/applications/{applicationName}', {
+        pathParameters: { applicationName },
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Delete an ArgoCD application
+     * @param applicationName - Name of the ArgoCD application
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsDelete: (applicationName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/applications/{applicationName}', {
+        pathParameters: { applicationName },
+        headerParameters
+    }, ApplicationApi._defaultBasePath),
+    /**
+     * Schedules a refresh of the specified application that will be picked up by ArgoCD asynchronously
+     *
+     * @param applicationName - Name of the ArgoCD application
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ApplicationsRefresh: (applicationName, headerParameters) => new OpenApiRequestBuilder('post', '/admin/applications/{applicationName}/refresh', {
+        pathParameters: { applicationName },
+        headerParameters
+    }, ApplicationApi._defaultBasePath)
+};
+//# sourceMappingURL=application-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/docker-registry-secret-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'DockerRegistrySecretApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const DockerRegistrySecretApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve the stored secret metadata which matches the parameter dockerRegistryName. The base64 encoded field for the stored secret is not returned.
+     *
+     * @param dockerRegistryName - Name of the docker Registry store for the secret.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DockerRegistrySecretsGet: (dockerRegistryName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
+        pathParameters: { dockerRegistryName },
+        headerParameters
+    }, DockerRegistrySecretApi._defaultBasePath),
+    /**
+     * Update a secret with name of dockerRegistryName if it exists.
+     *
+     * @param dockerRegistryName - Name of the docker Registry store for the secret.
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DockerRegistrySecretsPatch: (dockerRegistryName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
+        pathParameters: { dockerRegistryName },
+        body,
+        headerParameters: {
+            'content-type': 'application/merge-patch+json',
+            ...headerParameters
+        }
+    }, DockerRegistrySecretApi._defaultBasePath),
+    /**
+     * Delete a secret with the name of dockerRegistryName if it exists.
+     * @param dockerRegistryName - Name of the docker Registry store for the secret.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DockerRegistrySecretsDelete: (dockerRegistryName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
+        pathParameters: { dockerRegistryName },
+        headerParameters
+    }, DockerRegistrySecretApi._defaultBasePath),
+    /**
+     * Retrieve a list of metadata of the stored secrets
+     *
+     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DockerRegistrySecretsQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/dockerRegistrySecrets', {
+        headerParameters,
+        queryParameters
+    }, DockerRegistrySecretApi._defaultBasePath),
+    /**
+     * Create a secret based on the configuration in the request body.
+     *
+     * @param body - Request body.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4DockerRegistrySecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/dockerRegistrySecrets', {
+        body,
+        headerParameters: {
+            'content-type': 'application/json',
+            ...headerParameters
+        }
+    }, DockerRegistrySecretApi._defaultBasePath)
+};
+//# sourceMappingURL=docker-registry-secret-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/service-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ServiceApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ServiceApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Retrieve a list of services for a given main tenant.
+     *
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4AiservicesGetAll: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/services', {
+        headerParameters
+    }, ServiceApi._defaultBasePath),
+    /**
+     * Get an service of a given main tenant.
+     *
+     * @param serviceName - Name of the Service
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4AiservicesGet: (serviceName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/services/{serviceName}', {
+        pathParameters: { serviceName },
+        headerParameters
+    }, ServiceApi._defaultBasePath)
+};
+//# sourceMappingURL=service-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-quota-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'ResourceQuotaApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const ResourceQuotaApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Get the details about quota and usage for resource groups
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetResourceGroupQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/resourceGroups', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for executables
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetExecutableQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/executables', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for applications
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetApplicationQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/applications', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for repositories
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetRepositoryQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/repositories', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for tenant-scoped or tenant-wide generic secrets
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetGenericSecretQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/secrets', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for docker registry secrets
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetDockerRegistrySecretQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/dockerRegistrySecrets', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath),
+    /**
+     * Get the details about quota and usage for deployments
+     * @param queryParameters - Object containing the following keys: quotaOnly.
+     * @param headerParameters - Object containing the following keys: Authorization.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    kubesubmitV4ResourceQuotaGetDeploymentQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/deployments', {
+        headerParameters,
+        queryParameters
+    }, ResourceQuotaApi._defaultBasePath)
+};
+//# sourceMappingURL=resource-quota-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/tenant-info-api.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+/**
+ * Representation of the 'TenantInfoApi'.
+ * This API is part of the 'AI_CORE_API' service.
+ */
+const TenantInfoApi = {
+    _defaultBasePath: undefined,
+    /**
+     * Tenant information containing the service plan that the tenant is subscribed to.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    tenantInfoGet: () => new OpenApiRequestBuilder('get', '/admin/tenantInfo', {}, TenantInfoApi._defaultBasePath)
+};
+//# sourceMappingURL=tenant-info-api.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/index.js
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ *
+ * This is a generated file powered by the SAP Cloud SDK for JavaScript.
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//# sourceMappingURL=index.js.map
+// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/dist/internal.js
+var internal = __nccwpck_require__(23085);
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/model.js
+function isFoundationModel(model) {
+    return typeof model === 'object' && 'name' in model;
+}
+/**
+ * Get the model information from a deployment.
+ * @param deployment - AI core model deployment.
+ * @returns The model information.
+ * @internal
+ */
+function extractModel(deployment) {
+    const model = deployment.details?.resources?.backendDetails?.model;
+    if (isFoundationModel(model)) {
+        return model;
+    }
+}
+/**
+ * Translate a model configuration to a foundation model.
+ * @param modelConfig - Representation of a model.
+ * @returns The model as foundation model.
+ * @internal
+ */
+function model_translateToFoundationModel(modelConfig) {
+    if (typeof modelConfig === 'string') {
+        return { name: modelConfig };
+    }
+    return {
+        name: modelConfig.modelName,
+        ...(modelConfig.modelVersion && { version: modelConfig.modelVersion })
+    };
+}
+//# sourceMappingURL=model.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-cache.js
+
+
+
+
+function getCacheKey({ scenarioId, executableId = '', model, resourceGroup = 'default' }) {
+    return `${scenarioId}:${executableId}:${model?.name ?? ''}:${model?.version ?? ''}:${resourceGroup}`;
+}
+/**
+ * Create a cache for deployments.
+ * @param cache - Pure cache object.
+ * @returns The deployment cache.
+ * @internal
+ */
+function createDeploymentCache(cache) {
+    return {
+        /**
+         * Get a deployment from the cache.
+         * @param opts - Deployment resolution options to get the cached deployment for.
+         * @returns The cached deployment or undefined if not found.
+         */
+        get: (opts) => cache.get(getCacheKey(opts)),
+        /**
+         * Store a deployment in the cache.
+         * @param opts - Deployment resolution options to set the deployment for.
+         * @param deployment - Deployment to cache.
+         */
+        set: (opts, deployment) => {
+            cache.set(getCacheKey(opts), {
+                entry: transformDeploymentForCache(deployment)
+            });
+        },
+        /**
+         * Store multiple deployments in the cache, based on the model from the respective AI deployments.
+         * @param opts - Deployment resolution options to set the deployments for. Model information in the deployment resolution options are ignored.
+         * @param deployments - Deployments to retrieve the IDs and models from.
+         */
+        setAll: (opts, deployments) => {
+            // go backwards to cache the first deployment ID for each model
+            [...deployments]
+                .reverse()
+                .map(deployment => transformDeploymentForCache(deployment))
+                .flatMap(entry => [
+                entry,
+                { id: entry.id, url: entry.url },
+                ...(entry.model
+                    ? [
+                        {
+                            id: entry.id,
+                            url: entry.url,
+                            model: { name: entry.model.name }
+                        }
+                    ]
+                    : [])
+            ])
+                .forEach(entry => {
+                cache.set(getCacheKey({ ...opts, model: entry.model }), {
+                    entry
+                });
+            });
+        },
+        clear: () => cache.clear()
+    };
+}
+function transformDeploymentForCache(deployment) {
+    return {
+        id: deployment.id,
+        url: deployment.url,
+        model: extractModel(deployment)
+    };
+}
+/**
+ * Cache for deployments.
+ * @internal
+ */
+const deployment_cache_deploymentCache = createDeploymentCache(new internal.Cache(5 * 60 * 1000) // 5 minutes
+);
+//# sourceMappingURL=deployment-cache.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-resolver.js
+
+
+
+
+/**
+ * @internal
+ */
+function getResourceGroup(modelDeployment) {
+    return typeof modelDeployment === 'object'
+        ? modelDeployment.resourceGroup
+        : undefined;
+}
+/**
+ * Query the AI Core service for a deployment that matches the given criteria.
+ * If more than one deployment matches the criteria, the first one's ID is returned.
+ * @param opts - The options for the deployment resolution.
+ * @returns A promise of a deployment, if a deployment was found, fails otherwise.
+ * @internal
+ */
+async function resolveDeployment(opts) {
+    const { model } = opts;
+    let deployments = await getAllDeployments(opts);
+    if (model) {
+        deployments = deployments.filter(deployment => extractModel(deployment)?.name === model.name);
+        if (model.version) {
+            deployments = deployments.filter(deployment => extractModel(deployment)?.version === model.version);
+        }
+    }
+    if (!deployments.length) {
+        throw new Error(`No deployment matched the given criteria: ${JSON.stringify(opts)}. Make sure the deployment is successful, as it is a prerequisite before consuming orchestration or foundation models.`);
+    }
+    return deployments[0];
+}
+/**
+ * Type guard to check if the model deployment is a deployment ID config.
+ * @param modelDeployment - The model deployment configuration.
+ * @returns Whether the model deployment is a deployment ID config.
+ * @internal
+ */
+function isDeploymentIdConfig(modelDeployment) {
+    return (typeof modelDeployment === 'object' && 'deploymentId' in modelDeployment);
+}
+/**
+ * Query the AI Core service for a deployment that matches the given criteria.
+ * If more than one deployment matches the criteria, the first one's ID is returned.
+ * @param opts - The options for the deployment resolution.
+ * @returns A promise of a deployment, if a deployment was found, fails otherwise.
+ * @internal
+ */
+async function resolveDeploymentId(opts) {
+    const cachedDeployment = deployment_cache_deploymentCache.get(opts);
+    if (cachedDeployment?.id) {
+        return cachedDeployment.id;
+    }
+    return (await resolveDeployment(opts)).id;
+}
+/**
+ * Query the AI Core service for a deployment that matches the given criteria.
+ * If more than one deployment matches the criteria, the first one's URL is returned.
+ * @param opts - The options for the deployment resolution.
+ * @returns A promise of the deployment URL, if a deployment was found, fails otherwise.
+ */
+async function resolveDeploymentUrl(opts) {
+    const cachedDeployment = deploymentCache.get(opts);
+    if (cachedDeployment?.url) {
+        return cachedDeployment.url;
+    }
+    return (await resolveDeployment(opts)).deploymentUrl;
+}
+/**
+ * Fetch a deployment by ID and return its URL.
+ * Throws if the request fails or the deployment has no URL.
+ * @param deploymentId - The ID of the deployment.
+ * @param resourceGroup - The resource group of the deployment.
+ * @param destination - The destination to use for the request.
+ * @returns A promise of the deployment URL.
+ * @internal
+ */
+async function resolveDeploymentUrlById(deploymentId, resourceGroup, destination) {
+    const { deploymentUrl } = await DeploymentApi.deploymentGet(deploymentId, {}, { 'AI-Resource-Group': resourceGroup })
+        .execute(destination)
+        .catch((err) => {
+        throw new ErrorWithCause(`Fetching deployment for ID '${deploymentId}' failed.`, err);
+    });
+    if (!deploymentUrl) {
+        throw new Error(`Deployment for ID '${deploymentId}' has no deployment URL. Ensure the deployment is running.`);
+    }
+    return deploymentUrl;
+}
+/**
+ * Get all deployments that match the given criteria.
+ * @param opts - The options for the deployment resolution.
+ * @returns A promise of an array of deployments.
+ * @internal
+ */
+async function getAllDeployments(opts) {
+    const { destination, scenarioId, executableId, resourceGroup = 'default' } = opts;
+    try {
+        const { resources } = await deployment_api_DeploymentApi.deploymentQuery({
+            scenarioId,
+            status: 'RUNNING',
+            ...(executableId && { executableIds: [executableId] })
+        }, { 'AI-Resource-Group': resourceGroup }).execute(destination);
+        deployment_cache_deploymentCache.setAll(opts, resources);
+        return resources;
+    }
+    catch (error) {
+        throw new util_dist.ErrorWithCause('Failed to fetch the list of deployments.', error);
+    }
+}
+/**
+ * Resolve the deployment URL for a model deployment.
+ * If given a deployment ID, fetches the URL for that specific deployment.
+ * If given a model name, looks up a running deployment for that model.
+ * @param modelDeployment - Deployment identified by model name/version or by ID. Resource group should be passed through the resolution options and will be ignored here.
+ * @param options - Base resolution options (scenarioId, executableId, etc.) without `model` — that is derived from `modelDeployment`.
+ * @returns A promise of the deployment URL.
+ * @internal
+ */
+async function resolveDeploymentUrlForModel(modelDeployment, options) {
+    if (isDeploymentIdConfig(modelDeployment)) {
+        return resolveDeploymentUrlById(modelDeployment.deploymentId, options.resourceGroup, options.destination);
+    }
+    const model = translateToFoundationModel(modelDeployment);
+    const url = await resolveDeploymentUrl({
+        ...options,
+        resourceGroup: options.resourceGroup,
+        model
+    });
+    if (!url) {
+        throw new Error(`Deployment for model '${model.name}' has no deployment URL. Ensure the deployment is running.`);
+    }
+    return url;
+}
+/**
+ * Get the deployment ID for a foundation model scenario.
+ * @param modelDeployment - This configuration is used to retrieve a deployment. Depending on the configuration use either the given deployment ID or the model name to retrieve matching deployments. If model and deployment ID are given, the model is verified against the deployment.
+ * @param executableId - The scenario ID.
+ * @param destination - The destination to use for the request.
+ * @returns The ID of the deployment, if found.
+ * @internal
+ */
+async function getFoundationModelDeploymentId(modelDeployment, executableId, destination) {
+    if (isDeploymentIdConfig(modelDeployment)) {
+        return modelDeployment.deploymentId;
+    }
+    return resolveDeploymentId({
+        scenarioId: 'foundation-models',
+        executableId,
+        model: translateToFoundationModel(modelDeployment),
+        resourceGroup: getResourceGroup(modelDeployment),
+        destination
+    });
+}
+/**
+ * Get the deployment ID for an orchestration scenario.
+ * @param deploymentConfig - The deployment configuration (resource group or deployment ID).
+ * @param destination - The destination to use for the request.
+ * @returns The ID of the deployment, if found.
+ * @internal
+ */
+async function deployment_resolver_getOrchestrationDeploymentId(deploymentConfig, destination) {
+    if (isDeploymentIdConfig(deploymentConfig)) {
+        return deploymentConfig.deploymentId;
+    }
+    return resolveDeploymentId({
+        scenarioId: 'orchestration',
+        ...deploymentConfig,
+        destination
+    });
+}
+//# sourceMappingURL=deployment-resolver.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/index.js
+
+
+//# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/internal.js
+
+//# sourceMappingURL=internal.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/client/prompt-registry/prompt-templates-api.js
 /*
  * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
@@ -154264,1710 +155989,6 @@ const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigRe
 
 
 //# sourceMappingURL=internal.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/artifact-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ArtifactApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ArtifactApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of artifacts that matches the specified filter criteria.
-     * Filter criteria include scenario ID, execution ID, an artifact name, artifact kind, or artifact labels.
-     * Use top/skip parameters to paginate the result list.
-     * Search by substring of artifact name or description, if required.
-     *
-     * @param queryParameters - Object containing the following keys: scenarioId, executionId, name, kind, artifactLabelSelector, $top, $skip, $search, searchCaseInsensitive, $expand.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    artifactQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts', {
-        headerParameters,
-        queryParameters
-    }, ArtifactApi._defaultBasePath),
-    /**
-     * Register an artifact for use in a configuration, for example a model or a dataset.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    artifactCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/artifacts', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ArtifactApi._defaultBasePath),
-    /**
-     * Retrieve details for artifact with artifactId.
-     * @param artifactId - Artifact identifier
-     * @param queryParameters - Object containing the following keys: $expand.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    artifactGet: (artifactId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts/{artifactId}', {
-        pathParameters: { artifactId },
-        headerParameters,
-        queryParameters
-    }, ArtifactApi._defaultBasePath),
-    /**
-     * Retrieve  the number of available artifacts that match the specified filter criteria.
-     * Filter criteria include a scenarioId, executionId, an artifact name, artifact kind, or artifact labels.
-     * Search by substring of artifact name or description is also possible.
-     *
-     * @param queryParameters - Object containing the following keys: scenarioId, executionId, name, kind, $search, searchCaseInsensitive, artifactLabelSelector.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    artifactCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/artifacts/$count', {
-        headerParameters,
-        queryParameters
-    }, ArtifactApi._defaultBasePath)
-};
-//# sourceMappingURL=artifact-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/configuration-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ConfigurationApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ConfigurationApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of configurations. Filter results by scenario ID or a list of executable IDs.
-     * Search for configurations containing the search string as substring in the configuration name.
-     *
-     * @param queryParameters - Object containing the following keys: scenarioId, $top, $skip, executableIds, $search, searchCaseInsensitive, $expand.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    configurationQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations', {
-        headerParameters,
-        queryParameters
-    }, ConfigurationApi._defaultBasePath),
-    /**
-     * Create a new configuration linked to a specific scenario and executable for use in an execution
-     * or deployment.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    configurationCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/configurations', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ConfigurationApi._defaultBasePath),
-    /**
-     * Retrieve details for configuration with configurationId.
-     * @param configurationId - Configuration identifier
-     * @param queryParameters - Object containing the following keys: $expand.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    configurationGet: (configurationId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations/{configurationId}', {
-        pathParameters: { configurationId },
-        headerParameters,
-        queryParameters
-    }, ConfigurationApi._defaultBasePath),
-    /**
-     * Retrieve the number of available configurations that match the specified filter criteria.
-     * Filter criteria include a scenarioId or executableIdsList. Search by substring of configuration name is also possible.
-     *
-     * @param queryParameters - Object containing the following keys: scenarioId, $search, searchCaseInsensitive, executableIds.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    configurationCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/configurations/$count', {
-        headerParameters,
-        queryParameters
-    }, ConfigurationApi._defaultBasePath)
-};
-//# sourceMappingURL=configuration-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/deployment-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'DeploymentApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const deployment_api_DeploymentApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of deployments that match the specified filter criteria.
-     * Filter criteria include a list of executableIds, a scenarioId, a configurationId, or a deployment status.
-     * With top/skip parameters it is possible to paginate the result list.
-     * With select parameter it is possible to select only status.
-     *
-     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, status, $top, $skip, $select.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments', {
-        headerParameters,
-        queryParameters
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Create a deployment using the configuration specified by configurationId after synchronously checking the
-     * correctness of the configuration.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/deployments', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Update status of multiple deployments. stop or delete multiple deployments.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentBatchModify: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/deployments', {
-        body,
-        headerParameters: {
-            'content-type': 'application/merge-patch+json',
-            ...headerParameters
-        }
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Retrieve details for execution with deploymentId.
-     * @param deploymentId - Deployment identifier
-     * @param queryParameters - Object containing the following keys: $select.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentGet: (deploymentId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/{deploymentId}', {
-        pathParameters: { deploymentId },
-        headerParameters,
-        queryParameters
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Update target status of a deployment to stop a deployment or change the configuration to be used by the
-     * deployment after synchronously checking the correctness of the configuration. A change of configuration is only
-     * allowed for RUNNING and PENDING deployments.
-     *
-     * @param deploymentId - Deployment identifier
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentModify: (deploymentId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/deployments/{deploymentId}', {
-        pathParameters: { deploymentId },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Mark deployment with deploymentId as deleted.
-     * @param deploymentId - Deployment identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentDelete: (deploymentId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/deployments/{deploymentId}', {
-        pathParameters: { deploymentId },
-        headerParameters
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Retrieve the number of available deployments. The number can be filtered by
-     * scenarioId, configurationId, executableIdsList or by deployment status.
-     *
-     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, status.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    deploymentCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/$count', {
-        headerParameters,
-        queryParameters
-    }, deployment_api_DeploymentApi._defaultBasePath),
-    /**
-     * Retrieve logs of a deployment for getting insight into the deployment results or failures.
-     * @param deploymentId - Deployment identifier
-     * @param queryParameters - Object containing the following keys: $top, start, end, $order.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DeploymentsGetLogs: (deploymentId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/deployments/{deploymentId}/logs', {
-        pathParameters: { deploymentId },
-        headerParameters,
-        queryParameters
-    }, deployment_api_DeploymentApi._defaultBasePath)
-};
-//# sourceMappingURL=deployment-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/execution-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ExecutionApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ExecutionApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of executions that match the specified filter criteria.
-     * Filter criteria include a list of executableIds, a scenarioId, a configurationId, or a execution status.
-     * With top/skip parameters it is possible to paginate the result list.
-     * With select parameter it is possible to select only status.
-     *
-     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, executionScheduleId, status, $top, $skip, $select.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions', {
-        headerParameters,
-        queryParameters
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Create an execution using the configuration specified by configurationId.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/executions', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Patch multiple executions' status to stopped or deleted.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionBatchModify: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executions', {
-        body,
-        headerParameters: {
-            'content-type': 'application/merge-patch+json',
-            ...headerParameters
-        }
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Retrieve details for execution with executionId.
-     * @param executionId - Execution identifier
-     * @param queryParameters - Object containing the following keys: $select.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionGet: (executionId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/{executionId}', {
-        pathParameters: { executionId },
-        headerParameters,
-        queryParameters
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Update target status of the execution to stop an execution.
-     * @param executionId - Execution identifier
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionModify: (executionId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executions/{executionId}', {
-        pathParameters: { executionId },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Mark the execution with executionId as deleted.
-     * @param executionId - Execution identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionDelete: (executionId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/executions/{executionId}', {
-        pathParameters: { executionId },
-        headerParameters
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Retrieve the number of available executions. The number can be filtered by
-     * scenarioId, configurationId, executableIdsList or by execution status.
-     *
-     * @param queryParameters - Object containing the following keys: executableIds, configurationId, scenarioId, executionScheduleId, status.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/$count', {
-        headerParameters,
-        queryParameters
-    }, ExecutionApi._defaultBasePath),
-    /**
-     * Retrieve logs of an execution for getting insight into the execution results or failures.
-     * @param executionId - Execution identifier
-     * @param queryParameters - Object containing the following keys: $top, start, end, $order.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ExecutionsGetLogs: (executionId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executions/{executionId}/logs', {
-        pathParameters: { executionId },
-        headerParameters,
-        queryParameters
-    }, ExecutionApi._defaultBasePath)
-};
-//# sourceMappingURL=execution-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/execution-schedule-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ExecutionScheduleApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ExecutionScheduleApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of execution schedules that match the specified filter criteria.
-     * Filter criteria include executionScheduleStatus or a configurationId.
-     * With top/skip parameters it is possible to paginate the result list.
-     *
-     * @param queryParameters - Object containing the following keys: configurationId, status, $top, $skip.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules', {
-        headerParameters,
-        queryParameters
-    }, ExecutionScheduleApi._defaultBasePath),
-    /**
-     * Create an execution schedule using the configuration specified by configurationId, and schedule.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/lm/executionSchedules', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ExecutionScheduleApi._defaultBasePath),
-    /**
-     * Retrieve details for execution schedule with executionScheduleId.
-     * @param executionScheduleId - Execution Schedule identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleGet: (executionScheduleId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules/{executionScheduleId}', {
-        pathParameters: { executionScheduleId },
-        headerParameters
-    }, ExecutionScheduleApi._defaultBasePath),
-    /**
-     * Update details of an execution schedule
-     * @param executionScheduleId - Execution Schedule identifier
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleModify: (executionScheduleId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/executionSchedules/{executionScheduleId}', {
-        pathParameters: { executionScheduleId },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ExecutionScheduleApi._defaultBasePath),
-    /**
-     * Delete the execution schedule with executionScheduleId.
-     * @param executionScheduleId - Execution Schedule identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleDelete: (executionScheduleId, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/executionSchedules/{executionScheduleId}', {
-        pathParameters: { executionScheduleId },
-        headerParameters
-    }, ExecutionScheduleApi._defaultBasePath),
-    /**
-     * Retrieve the number of scheduled executions. The number can be filtered by
-     * configurationId or executionScheduleStatus.
-     *
-     * @param queryParameters - Object containing the following keys: configurationId, status.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executionScheduleCount: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/executionSchedules/$count', {
-        headerParameters,
-        queryParameters
-    }, ExecutionScheduleApi._defaultBasePath)
-};
-//# sourceMappingURL=execution-schedule-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/scenario-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ScenarioApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ScenarioApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of all available scenarios.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    scenarioQuery: (headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios', {
-        headerParameters
-    }, ScenarioApi._defaultBasePath),
-    /**
-     * Retrieve details for a scenario specified by scenarioId.
-     * @param scenarioId - Scenario identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    scenarioGet: (scenarioId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}', {
-        pathParameters: { scenarioId },
-        headerParameters
-    }, ScenarioApi._defaultBasePath),
-    /**
-     * Retrieve a list of scenario versions based on the versions of executables
-     * available within that scenario.
-     *
-     * @param scenarioId - Scenario identifier
-     * @param queryParameters - Object containing the following keys: labelSelector.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    scenarioQueryVersions: (scenarioId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/versions', {
-        pathParameters: { scenarioId },
-        headerParameters,
-        queryParameters
-    }, ScenarioApi._defaultBasePath),
-    /**
-     * Retrieve information about all models available in LLM global scenario
-     * @param scenarioId - Scenario identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    scenarioQueryModels: (scenarioId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/models', {
-        pathParameters: { scenarioId },
-        headerParameters
-    }, ScenarioApi._defaultBasePath)
-};
-//# sourceMappingURL=scenario-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/executable-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ExecutableApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ExecutableApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of executables for a scenario. Filter by version ID, if required.
-     *
-     * @param scenarioId - Scenario identifier
-     * @param queryParameters - Object containing the following keys: versionId.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executableQuery: (scenarioId, queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/executables', {
-        pathParameters: { scenarioId },
-        headerParameters,
-        queryParameters
-    }, ExecutableApi._defaultBasePath),
-    /**
-     * Retrieve details about an executable identified by executableId belonging
-     * to a scenario identified by scenarioId.
-     *
-     * @param scenarioId - Scenario identifier
-     * @param executableId - Executable identifier
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    executableGet: (scenarioId, executableId, headerParameters) => new OpenApiRequestBuilder('get', '/lm/scenarios/{scenarioId}/executables/{executableId}', {
-        pathParameters: { scenarioId, executableId },
-        headerParameters
-    }, ExecutableApi._defaultBasePath)
-};
-//# sourceMappingURL=executable-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/meta-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'MetaApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const MetaApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Meta information about an implementation of AI API, describing its capabilities, limits and extensions
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    metaGet: () => new OpenApiRequestBuilder('get', '/lm/meta', {}, MetaApi._defaultBasePath)
-};
-//# sourceMappingURL=meta-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/metrics-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'MetricsApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const MetricsApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve metrics, labels, or tags according to filter conditions.
-     * One query parameter is mandatory, either execution ID or filter.
-     * Use up to 10 execution IDs in a query parameter.
-     * With top/skip parameters it is possible to paginate the result list.
-     *
-     * @param queryParameters - Object containing the following keys: $filter, executionIds, $select, tagFilters, $top, $skip.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    metricsFind: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/lm/metrics', {
-        headerParameters,
-        queryParameters
-    }, MetricsApi._defaultBasePath),
-    /**
-     * Update or create metrics, tags, or labels associated with an execution.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    metricsPatch: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/lm/metrics', {
-        body,
-        headerParameters: {
-            'content-type': 'application/merge-patch+json',
-            ...headerParameters
-        }
-    }, MetricsApi._defaultBasePath),
-    /**
-     * Delete metrics, tags, or labels associated with an execution.
-     * @param queryParameters - Object containing the following keys: executionId.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    metricsDelete: (queryParameters, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/metrics', {
-        headerParameters,
-        queryParameters
-    }, MetricsApi._defaultBasePath)
-};
-//# sourceMappingURL=metrics-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/kpi-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'KPIApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const KPIApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve the number of executions, artifacts, and deployments
-     * for each resource group, scenario, and executable. The columns to be returned can be specified in a query parameter.
-     *
-     * @param queryParameters - Object containing the following keys: $select.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kpiGet: (queryParameters) => new OpenApiRequestBuilder('get', '/analytics/kpis', {
-        queryParameters
-    }, KPIApi._defaultBasePath)
-};
-//# sourceMappingURL=kpi-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/file-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'FileApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const FileApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Endpoint for downloading file. The path must point to an individual file.
-     * @param path - path relative to the object store root URL in the secret
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    fileDownload: (path, headerParameters) => new OpenApiRequestBuilder('get', '/lm/dataset/files/{path}', {
-        pathParameters: { path },
-        headerParameters
-    }, FileApi._defaultBasePath),
-    /**
-     * Endpoint for uploading file. The maximum file size depends on the actual implementation
-     * but must not exceed 100MB. The actual file size limit can be obtained by querying
-     * the AI API Runtime Capabilities Endpoint and checking the limits in the section of the `fileUpload` extension.
-     *
-     *  Path cannot be a prefix, it must be a path to an object.
-     * Clients may group the objects in any manner they choose by specifying path prefixes.
-     *
-     * Allowed mime-types will be decided by the implementation.
-     * Content-Type header can be set to "application/octet-stream" but the implementation is responsible
-     * for detecting the actual mime type and checking against the allowed list of mime types.
-     * For security reasons, implementations cannot trust the mime type sent by the client.
-     *
-     * Example URLs:
-     * /files/dar/schemas/schema.json
-     * /files/icr/datasets/training/20201001/20201001-01.csv
-     * /files/icr/datasets/training/20201001/20201001-02.csv
-     * /files/mask-detection/training/mask-detection-20210301.tar.gz
-     * @param path - path relative to the object store root URL in the secret
-     * @param body - Body of the file upload request
-     * @param queryParameters - Object containing the following keys: overwrite.
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    fileUpload: (path, body, queryParameters, headerParameters) => new OpenApiRequestBuilder('put', '/lm/dataset/files/{path}', {
-        pathParameters: { path },
-        body,
-        headerParameters: { 'content-type': '*/*', ...headerParameters },
-        queryParameters
-    }, FileApi._defaultBasePath),
-    /**
-     * Delete the file specified by the path parameter.
-     * @param path - path relative to the object store root URL in the secret
-     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    fileDelete: (path, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/dataset/files/{path}', {
-        pathParameters: { path },
-        headerParameters
-    }, FileApi._defaultBasePath)
-};
-//# sourceMappingURL=file-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/object-store-secret-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ObjectStoreSecretApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ObjectStoreSecretApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of metadata of the stored secrets.
-     *
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ObjectStoreSecretsQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/objectStoreSecrets', {
-        headerParameters,
-        queryParameters
-    }, ObjectStoreSecretApi._defaultBasePath),
-    /**
-     * Create a secret based on the configuration in the request body
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ObjectStoreSecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/objectStoreSecrets', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ObjectStoreSecretApi._defaultBasePath),
-    /**
-     * This retrieves the metadata of the stored secret which match the parameter objectStoreName.
-     * The fetched secret is constructed like objectStoreName-object-store-secret
-     * The base64 encoded field for the stored secret is not returned.
-     *
-     * @param objectStoreName - Name of the object store for the secret.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ObjectStoreSecretsGet: (objectStoreName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/objectStoreSecrets/{objectStoreName}', {
-        pathParameters: { objectStoreName },
-        headerParameters
-    }, ObjectStoreSecretApi._defaultBasePath),
-    /**
-     * Update a secret with name of objectStoreName if it exists.
-     *
-     * @param objectStoreName - Name of the object store for the secret.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ObjectStoreSecretsPatch: (objectStoreName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/objectStoreSecrets/{objectStoreName}', {
-        pathParameters: { objectStoreName },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ObjectStoreSecretApi._defaultBasePath),
-    /**
-     * Delete a secret with the name of objectStoreName if it exists.
-     * @param objectStoreName - Name of the object store for the secret.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ObjectStoreSecretsDelete: (objectStoreName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/objectStoreSecrets/{objectStoreName}', {
-        pathParameters: { objectStoreName },
-        headerParameters
-    }, ObjectStoreSecretApi._defaultBasePath)
-};
-//# sourceMappingURL=object-store-secret-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/secret-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'SecretApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const SecretApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Lists all secrets corresponding to tenant. This retrieves metadata only, not the secret data itself.
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4GenericSecretsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/secrets', {
-        headerParameters,
-        queryParameters
-    }, SecretApi._defaultBasePath),
-    /**
-     * Create a new generic secret in the corresponding resource group or at main tenant level.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4GenericSecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/secrets', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, SecretApi._defaultBasePath),
-    /**
-     * Retrieve a single generic secret. This retrieves metadata only, not the secret data itself.
-     * @param secretName - Path parameter.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4GenericSecretsGet: (secretName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/secrets/{secretName}', {
-        pathParameters: { secretName },
-        headerParameters
-    }, SecretApi._defaultBasePath),
-    /**
-     * Update secret credentials. Replace secret data with the provided data.
-     * @param secretName - Path parameter.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4GenericSecretsUpdate: (secretName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/secrets/{secretName}', {
-        pathParameters: { secretName },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, SecretApi._defaultBasePath),
-    /**
-     * Deletes the secret from provided resource group namespace
-     * @param secretName - Path parameter.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4GenericSecretsDelete: (secretName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/secrets/{secretName}', {
-        pathParameters: { secretName },
-        headerParameters
-    }, SecretApi._defaultBasePath)
-};
-//# sourceMappingURL=secret-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-group-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ResourceGroupApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ResourceGroupApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of resource groups for a given tenant.
-     *
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count, continueToken, labelSelector.
-     * @param headerParameters - Object containing the following keys: Authorization, Prefer.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcegroupsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceGroups', {
-        headerParameters,
-        queryParameters
-    }, ResourceGroupApi._defaultBasePath),
-    /**
-     * Create resource group to a given main tenant. The length of resource group id must be between 3 and 253.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcegroupsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/resourceGroups', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ResourceGroupApi._defaultBasePath),
-    /**
-     * Get a resource group of a given main tenant.
-     *
-     * @param resourceGroupId - Resource group identifier
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcegroupsGet: (resourceGroupId, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceGroups/{resourceGroupId}', {
-        pathParameters: { resourceGroupId },
-        headerParameters
-    }, ResourceGroupApi._defaultBasePath),
-    /**
-     * Replace some characteristics of the resource group, for instance labels.
-     *
-     * @param resourceGroupId - Resource group identifier
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcegroupsPatch: (resourceGroupId, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/resourceGroups/{resourceGroupId}', {
-        pathParameters: { resourceGroupId },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ResourceGroupApi._defaultBasePath),
-    /**
-     * Delete a resource group of a given main tenant.
-     *
-     * @param resourceGroupId - Resource group identifier
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcegroupsDelete: (resourceGroupId, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/resourceGroups/{resourceGroupId}', {
-        pathParameters: { resourceGroupId },
-        headerParameters
-    }, ResourceGroupApi._defaultBasePath)
-};
-//# sourceMappingURL=resource-group-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ResourceApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ResourceApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Lists all hot spare nodes, used nodes and total nodes corresponding to tenant.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcesGet: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/resources/nodes', {
-        headerParameters
-    }, ResourceApi._defaultBasePath),
-    /**
-     * Set hot spare nodes corresponding to tenant at main tenant level.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourcesPatch: (body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/resources/nodes', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ResourceApi._defaultBasePath),
-    /**
-     * Lists all the instance types available in the cluster.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4InstanceTypesGet: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/resources/instanceTypes', {
-        headerParameters
-    }, ResourceApi._defaultBasePath)
-};
-//# sourceMappingURL=resource-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/repository-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'RepositoryApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const RepositoryApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of all GitOps repositories for a tenant.
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4RepositoriesGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/repositories', {
-        headerParameters,
-        queryParameters
-    }, RepositoryApi._defaultBasePath),
-    /**
-     * On-board a new GitOps repository as specified in the content payload
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4RepositoriesCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/repositories', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, RepositoryApi._defaultBasePath),
-    /**
-     * Retrieve the access details for a repository if it exists.
-     * @param repositoryName - Name of the repository
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4RepositoriesGet: (repositoryName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/repositories/{repositoryName}', {
-        pathParameters: { repositoryName },
-        headerParameters
-    }, RepositoryApi._defaultBasePath),
-    /**
-     * Update the referenced repository credentials to synchronize a repository.
-     *
-     * @param repositoryName - Name of the repository
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4RepositoriesUpdate: (repositoryName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/repositories/{repositoryName}', {
-        pathParameters: { repositoryName },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, RepositoryApi._defaultBasePath),
-    /**
-     * Remove a repository from GitOps.
-     * @param repositoryName - Name of the repository
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4RepositoriesDelete: (repositoryName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/repositories/{repositoryName}', {
-        pathParameters: { repositoryName },
-        headerParameters
-    }, RepositoryApi._defaultBasePath)
-};
-//# sourceMappingURL=repository-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/application-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ApplicationApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ApplicationApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Return all Argo CD application data objects.
-     *
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsGetAll: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications', {
-        headerParameters,
-        queryParameters
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Create an ArgoCD application to synchronise a repository.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/applications', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Returns the ArgoCD application health and sync status.
-     *
-     * @param applicationName - Name of the ArgoCD application
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsGetStatus: (applicationName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications/{applicationName}/status', {
-        pathParameters: { applicationName },
-        headerParameters
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Retrieve the ArgoCD application details.
-     *
-     * @param applicationName - Name of the ArgoCD application
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsGet: (applicationName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/applications/{applicationName}', {
-        pathParameters: { applicationName },
-        headerParameters
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Update the referenced ArgoCD application to synchronize the repository.
-     *
-     * @param applicationName - Name of the ArgoCD application
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsUpdate: (applicationName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/applications/{applicationName}', {
-        pathParameters: { applicationName },
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Delete an ArgoCD application
-     * @param applicationName - Name of the ArgoCD application
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsDelete: (applicationName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/applications/{applicationName}', {
-        pathParameters: { applicationName },
-        headerParameters
-    }, ApplicationApi._defaultBasePath),
-    /**
-     * Schedules a refresh of the specified application that will be picked up by ArgoCD asynchronously
-     *
-     * @param applicationName - Name of the ArgoCD application
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ApplicationsRefresh: (applicationName, headerParameters) => new OpenApiRequestBuilder('post', '/admin/applications/{applicationName}/refresh', {
-        pathParameters: { applicationName },
-        headerParameters
-    }, ApplicationApi._defaultBasePath)
-};
-//# sourceMappingURL=application-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/docker-registry-secret-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'DockerRegistrySecretApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const DockerRegistrySecretApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve the stored secret metadata which matches the parameter dockerRegistryName. The base64 encoded field for the stored secret is not returned.
-     *
-     * @param dockerRegistryName - Name of the docker Registry store for the secret.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DockerRegistrySecretsGet: (dockerRegistryName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
-        pathParameters: { dockerRegistryName },
-        headerParameters
-    }, DockerRegistrySecretApi._defaultBasePath),
-    /**
-     * Update a secret with name of dockerRegistryName if it exists.
-     *
-     * @param dockerRegistryName - Name of the docker Registry store for the secret.
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DockerRegistrySecretsPatch: (dockerRegistryName, body, headerParameters) => new OpenApiRequestBuilder('patch', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
-        pathParameters: { dockerRegistryName },
-        body,
-        headerParameters: {
-            'content-type': 'application/merge-patch+json',
-            ...headerParameters
-        }
-    }, DockerRegistrySecretApi._defaultBasePath),
-    /**
-     * Delete a secret with the name of dockerRegistryName if it exists.
-     * @param dockerRegistryName - Name of the docker Registry store for the secret.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DockerRegistrySecretsDelete: (dockerRegistryName, headerParameters) => new OpenApiRequestBuilder('delete', '/admin/dockerRegistrySecrets/{dockerRegistryName}', {
-        pathParameters: { dockerRegistryName },
-        headerParameters
-    }, DockerRegistrySecretApi._defaultBasePath),
-    /**
-     * Retrieve a list of metadata of the stored secrets
-     *
-     * @param queryParameters - Object containing the following keys: $top, $skip, $count.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DockerRegistrySecretsQuery: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/dockerRegistrySecrets', {
-        headerParameters,
-        queryParameters
-    }, DockerRegistrySecretApi._defaultBasePath),
-    /**
-     * Create a secret based on the configuration in the request body.
-     *
-     * @param body - Request body.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4DockerRegistrySecretsCreate: (body, headerParameters) => new OpenApiRequestBuilder('post', '/admin/dockerRegistrySecrets', {
-        body,
-        headerParameters: {
-            'content-type': 'application/json',
-            ...headerParameters
-        }
-    }, DockerRegistrySecretApi._defaultBasePath)
-};
-//# sourceMappingURL=docker-registry-secret-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/service-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ServiceApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ServiceApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Retrieve a list of services for a given main tenant.
-     *
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4AiservicesGetAll: (headerParameters) => new OpenApiRequestBuilder('get', '/admin/services', {
-        headerParameters
-    }, ServiceApi._defaultBasePath),
-    /**
-     * Get an service of a given main tenant.
-     *
-     * @param serviceName - Name of the Service
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4AiservicesGet: (serviceName, headerParameters) => new OpenApiRequestBuilder('get', '/admin/services/{serviceName}', {
-        pathParameters: { serviceName },
-        headerParameters
-    }, ServiceApi._defaultBasePath)
-};
-//# sourceMappingURL=service-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/resource-quota-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'ResourceQuotaApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const ResourceQuotaApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Get the details about quota and usage for resource groups
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetResourceGroupQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/resourceGroups', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for executables
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetExecutableQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/executables', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for applications
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetApplicationQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/applications', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for repositories
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetRepositoryQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/repositories', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for tenant-scoped or tenant-wide generic secrets
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization, AI-Resource-Group, AI-Tenant-Scope.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetGenericSecretQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/secrets', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for docker registry secrets
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetDockerRegistrySecretQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/dockerRegistrySecrets', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath),
-    /**
-     * Get the details about quota and usage for deployments
-     * @param queryParameters - Object containing the following keys: quotaOnly.
-     * @param headerParameters - Object containing the following keys: Authorization.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    kubesubmitV4ResourceQuotaGetDeploymentQuota: (queryParameters, headerParameters) => new OpenApiRequestBuilder('get', '/admin/resourceQuota/deployments', {
-        headerParameters,
-        queryParameters
-    }, ResourceQuotaApi._defaultBasePath)
-};
-//# sourceMappingURL=resource-quota-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/tenant-info-api.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-/**
- * Representation of the 'TenantInfoApi'.
- * This API is part of the 'AI_CORE_API' service.
- */
-const TenantInfoApi = {
-    _defaultBasePath: undefined,
-    /**
-     * Tenant information containing the service plan that the tenant is subscribed to.
-     * @returns The request builder, use the `execute()` method to trigger the request.
-     */
-    tenantInfoGet: () => new OpenApiRequestBuilder('get', '/admin/tenantInfo', {}, TenantInfoApi._defaultBasePath)
-};
-//# sourceMappingURL=tenant-info-api.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/client/AI_CORE_API/index.js
-/*
- * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
- *
- * This is a generated file powered by the SAP Cloud SDK for JavaScript.
- */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//# sourceMappingURL=index.js.map
-// EXTERNAL MODULE: ./node_modules/@sap-cloud-sdk/connectivity/dist/internal.js
-var internal = __nccwpck_require__(23085);
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/model.js
-function isFoundationModel(model) {
-    return typeof model === 'object' && 'name' in model;
-}
-/**
- * Get the model information from a deployment.
- * @param deployment - AI core model deployment.
- * @returns The model information.
- * @internal
- */
-function extractModel(deployment) {
-    const model = deployment.details?.resources?.backendDetails?.model;
-    if (isFoundationModel(model)) {
-        return model;
-    }
-}
-/**
- * Translate a model configuration to a foundation model.
- * @param modelConfig - Representation of a model.
- * @returns The model as foundation model.
- * @internal
- */
-function model_translateToFoundationModel(modelConfig) {
-    if (typeof modelConfig === 'string') {
-        return { name: modelConfig };
-    }
-    return {
-        name: modelConfig.modelName,
-        ...(modelConfig.modelVersion && { version: modelConfig.modelVersion })
-    };
-}
-//# sourceMappingURL=model.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-cache.js
-
-
-
-
-function getCacheKey({ scenarioId, executableId = '', model, resourceGroup = 'default' }) {
-    return `${scenarioId}:${executableId}:${model?.name ?? ''}:${model?.version ?? ''}:${resourceGroup}`;
-}
-/**
- * Create a cache for deployments.
- * @param cache - Pure cache object.
- * @returns The deployment cache.
- * @internal
- */
-function createDeploymentCache(cache) {
-    return {
-        /**
-         * Get a deployment from the cache.
-         * @param opts - Deployment resolution options to get the cached deployment for.
-         * @returns The cached deployment or undefined if not found.
-         */
-        get: (opts) => cache.get(getCacheKey(opts)),
-        /**
-         * Store a deployment in the cache.
-         * @param opts - Deployment resolution options to set the deployment for.
-         * @param deployment - Deployment to cache.
-         */
-        set: (opts, deployment) => {
-            cache.set(getCacheKey(opts), {
-                entry: transformDeploymentForCache(deployment)
-            });
-        },
-        /**
-         * Store multiple deployments in the cache, based on the model from the respective AI deployments.
-         * @param opts - Deployment resolution options to set the deployments for. Model information in the deployment resolution options are ignored.
-         * @param deployments - Deployments to retrieve the IDs and models from.
-         */
-        setAll: (opts, deployments) => {
-            // go backwards to cache the first deployment ID for each model
-            [...deployments]
-                .reverse()
-                .map(deployment => transformDeploymentForCache(deployment))
-                .flatMap(entry => [
-                entry,
-                { id: entry.id, url: entry.url },
-                ...(entry.model
-                    ? [
-                        {
-                            id: entry.id,
-                            url: entry.url,
-                            model: { name: entry.model.name }
-                        }
-                    ]
-                    : [])
-            ])
-                .forEach(entry => {
-                cache.set(getCacheKey({ ...opts, model: entry.model }), {
-                    entry
-                });
-            });
-        },
-        clear: () => cache.clear()
-    };
-}
-function transformDeploymentForCache(deployment) {
-    return {
-        id: deployment.id,
-        url: deployment.url,
-        model: extractModel(deployment)
-    };
-}
-/**
- * Cache for deployments.
- * @internal
- */
-const deployment_cache_deploymentCache = createDeploymentCache(new internal.Cache(5 * 60 * 1000) // 5 minutes
-);
-//# sourceMappingURL=deployment-cache.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/deployment-resolver.js
-
-
-
-
-/**
- * @internal
- */
-function getResourceGroup(modelDeployment) {
-    return typeof modelDeployment === 'object'
-        ? modelDeployment.resourceGroup
-        : undefined;
-}
-/**
- * Query the AI Core service for a deployment that matches the given criteria.
- * If more than one deployment matches the criteria, the first one's ID is returned.
- * @param opts - The options for the deployment resolution.
- * @returns A promise of a deployment, if a deployment was found, fails otherwise.
- * @internal
- */
-async function resolveDeployment(opts) {
-    const { model } = opts;
-    let deployments = await getAllDeployments(opts);
-    if (model) {
-        deployments = deployments.filter(deployment => extractModel(deployment)?.name === model.name);
-        if (model.version) {
-            deployments = deployments.filter(deployment => extractModel(deployment)?.version === model.version);
-        }
-    }
-    if (!deployments.length) {
-        throw new Error(`No deployment matched the given criteria: ${JSON.stringify(opts)}. Make sure the deployment is successful, as it is a prerequisite before consuming orchestration or foundation models.`);
-    }
-    return deployments[0];
-}
-/**
- * Type guard to check if the model deployment is a deployment ID config.
- * @param modelDeployment - The model deployment configuration.
- * @returns Whether the model deployment is a deployment ID config.
- * @internal
- */
-function isDeploymentIdConfig(modelDeployment) {
-    return (typeof modelDeployment === 'object' && 'deploymentId' in modelDeployment);
-}
-/**
- * Query the AI Core service for a deployment that matches the given criteria.
- * If more than one deployment matches the criteria, the first one's ID is returned.
- * @param opts - The options for the deployment resolution.
- * @returns A promise of a deployment, if a deployment was found, fails otherwise.
- * @internal
- */
-async function resolveDeploymentId(opts) {
-    const cachedDeployment = deployment_cache_deploymentCache.get(opts);
-    if (cachedDeployment?.id) {
-        return cachedDeployment.id;
-    }
-    return (await resolveDeployment(opts)).id;
-}
-/**
- * Query the AI Core service for a deployment that matches the given criteria.
- * If more than one deployment matches the criteria, the first one's URL is returned.
- * @param opts - The options for the deployment resolution.
- * @returns A promise of the deployment URL, if a deployment was found, fails otherwise.
- */
-async function resolveDeploymentUrl(opts) {
-    const cachedDeployment = deploymentCache.get(opts);
-    if (cachedDeployment?.url) {
-        return cachedDeployment.url;
-    }
-    return (await resolveDeployment(opts)).deploymentUrl;
-}
-/**
- * Fetch a deployment by ID and return its URL.
- * Throws if the request fails or the deployment has no URL.
- * @param deploymentId - The ID of the deployment.
- * @param resourceGroup - The resource group of the deployment.
- * @param destination - The destination to use for the request.
- * @returns A promise of the deployment URL.
- * @internal
- */
-async function resolveDeploymentUrlById(deploymentId, resourceGroup, destination) {
-    const { deploymentUrl } = await DeploymentApi.deploymentGet(deploymentId, {}, { 'AI-Resource-Group': resourceGroup })
-        .execute(destination)
-        .catch((err) => {
-        throw new ErrorWithCause(`Fetching deployment for ID '${deploymentId}' failed.`, err);
-    });
-    if (!deploymentUrl) {
-        throw new Error(`Deployment for ID '${deploymentId}' has no deployment URL. Ensure the deployment is running.`);
-    }
-    return deploymentUrl;
-}
-/**
- * Get all deployments that match the given criteria.
- * @param opts - The options for the deployment resolution.
- * @returns A promise of an array of deployments.
- * @internal
- */
-async function getAllDeployments(opts) {
-    const { destination, scenarioId, executableId, resourceGroup = 'default' } = opts;
-    try {
-        const { resources } = await deployment_api_DeploymentApi.deploymentQuery({
-            scenarioId,
-            status: 'RUNNING',
-            ...(executableId && { executableIds: [executableId] })
-        }, { 'AI-Resource-Group': resourceGroup }).execute(destination);
-        deployment_cache_deploymentCache.setAll(opts, resources);
-        return resources;
-    }
-    catch (error) {
-        throw new util_dist.ErrorWithCause('Failed to fetch the list of deployments.', error);
-    }
-}
-/**
- * Resolve the deployment URL for a model deployment.
- * If given a deployment ID, fetches the URL for that specific deployment.
- * If given a model name, looks up a running deployment for that model.
- * @param modelDeployment - Deployment identified by model name/version or by ID. Resource group should be passed through the resolution options and will be ignored here.
- * @param options - Base resolution options (scenarioId, executableId, etc.) without `model` — that is derived from `modelDeployment`.
- * @returns A promise of the deployment URL.
- * @internal
- */
-async function resolveDeploymentUrlForModel(modelDeployment, options) {
-    if (isDeploymentIdConfig(modelDeployment)) {
-        return resolveDeploymentUrlById(modelDeployment.deploymentId, options.resourceGroup, options.destination);
-    }
-    const model = translateToFoundationModel(modelDeployment);
-    const url = await resolveDeploymentUrl({
-        ...options,
-        resourceGroup: options.resourceGroup,
-        model
-    });
-    if (!url) {
-        throw new Error(`Deployment for model '${model.name}' has no deployment URL. Ensure the deployment is running.`);
-    }
-    return url;
-}
-/**
- * Get the deployment ID for a foundation model scenario.
- * @param modelDeployment - This configuration is used to retrieve a deployment. Depending on the configuration use either the given deployment ID or the model name to retrieve matching deployments. If model and deployment ID are given, the model is verified against the deployment.
- * @param executableId - The scenario ID.
- * @param destination - The destination to use for the request.
- * @returns The ID of the deployment, if found.
- * @internal
- */
-async function getFoundationModelDeploymentId(modelDeployment, executableId, destination) {
-    if (isDeploymentIdConfig(modelDeployment)) {
-        return modelDeployment.deploymentId;
-    }
-    return resolveDeploymentId({
-        scenarioId: 'foundation-models',
-        executableId,
-        model: translateToFoundationModel(modelDeployment),
-        resourceGroup: getResourceGroup(modelDeployment),
-        destination
-    });
-}
-/**
- * Get the deployment ID for an orchestration scenario.
- * @param deploymentConfig - The deployment configuration (resource group or deployment ID).
- * @param destination - The destination to use for the request.
- * @returns The ID of the deployment, if found.
- * @internal
- */
-async function deployment_resolver_getOrchestrationDeploymentId(deploymentConfig, destination) {
-    if (isDeploymentIdConfig(deploymentConfig)) {
-        return deploymentConfig.deploymentId;
-    }
-    return resolveDeploymentId({
-        scenarioId: 'orchestration',
-        ...deploymentConfig,
-        destination
-    });
-}
-//# sourceMappingURL=deployment-resolver.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/utils/index.js
-
-
-//# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/ai-api/dist/internal.js
-
-//# sourceMappingURL=internal.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/orchestration-response.js
 /**
  * Representation of an orchestration response.
@@ -156142,7 +156163,7 @@ class OrchestrationClient {
     config;
     deploymentConfig;
     destination;
-    /* eslint-enable @typescript-eslint/unified-signatures */
+    /* oxlint-enable typescript/unified-signatures */
     constructor(config, deploymentConfig, destination) {
         this.config = config;
         this.deploymentConfig = deploymentConfig;
