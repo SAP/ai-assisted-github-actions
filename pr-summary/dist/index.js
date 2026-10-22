@@ -137793,7 +137793,7 @@ function _promise(Class, innerType) {
 }
 // @__NO_SIDE_EFFECTS__
 function _custom(Class, fn, _params) {
-    const norm = util.normalizeParams(_params);
+    const norm = normalizeParams(_params);
     norm.abort ?? (norm.abort = true); // default to abort:false
     const schema = new Class({
         type: "custom",
@@ -140473,7 +140473,7 @@ const ZodUUID = /*@__PURE__*/ $constructor("ZodUUID", (inst, def) => {
     ZodStringFormat.init(inst, def);
 });
 function schemas_uuid(params) {
-    return _uuid(ZodUUID, params);
+    return core._uuid(ZodUUID, params);
 }
 function uuidv4(params) {
     return core._uuidv4(ZodUUID, params);
@@ -140773,7 +140773,7 @@ const ZodBoolean = /*@__PURE__*/ $constructor("ZodBoolean", (inst, def) => {
     inst._zod.processJSONSchema = (ctx, json, params) => booleanProcessor(inst, ctx, json, params);
 });
 function schemas_boolean(params) {
-    return _boolean(ZodBoolean, params);
+    return core._boolean(ZodBoolean, params);
 }
 const ZodBigInt = /*@__PURE__*/ $constructor("ZodBigInt", (inst, def) => {
     $ZodBigInt.init(inst, def);
@@ -141016,7 +141016,7 @@ function looseObject(shape, params) {
         type: "object",
         shape,
         catchall: unknown(),
-        ...normalizeParams(params),
+        ...util.normalizeParams(params),
     });
 }
 const ZodUnion = /*@__PURE__*/ $constructor("ZodUnion", (inst, def) => {
@@ -141253,10 +141253,10 @@ function nativeEnum(entries, params) {
         ...util.normalizeParams(params),
     });
 }
-const ZodLiteral = /*@__PURE__*/ $constructor("ZodLiteral", (inst, def) => {
-    $ZodLiteral.init(inst, def);
+const ZodLiteral = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodLiteral", (inst, def) => {
+    core.$ZodLiteral.init(inst, def);
     ZodType.init(inst, def);
-    inst._zod.processJSONSchema = (ctx, json, params) => literalProcessor(inst, ctx, json, params);
+    inst._zod.processJSONSchema = (ctx, json, params) => processors.literalProcessor(inst, ctx, json, params);
     inst.values = new Set(def.values);
     Object.defineProperty(inst, "value", {
         get() {
@@ -141266,12 +141266,12 @@ const ZodLiteral = /*@__PURE__*/ $constructor("ZodLiteral", (inst, def) => {
             return def.values[0];
         },
     });
-});
+})));
 function literal(value, params) {
     return new ZodLiteral({
         type: "literal",
         values: Array.isArray(value) ? value : [value],
-        ...normalizeParams(params),
+        ...util.normalizeParams(params),
     });
 }
 const ZodFile = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodFile", (inst, def) => {
@@ -141591,7 +141591,7 @@ function _instanceof(cls, params = {}) {
         check: "custom",
         fn: (data) => data instanceof cls,
         abort: true,
-        ...normalizeParams(params),
+        ...util.normalizeParams(params),
     });
     inst._zod.bag.Class = cls;
     // Override check to emit invalid_type instead of custom
@@ -149376,6 +149376,22 @@ function parseServiceKeyFromEnv(aiCoreEnv) {
 
 
 /**
+ * A replacer function for JSON.stringify that handles Set and Map objects.
+ * @param _key - The key of the property being processed.
+ * @param value - The value of the property being processed.
+ * @returns The processed value.
+ * @internal
+ */
+function jsonStringReplacer(_key, value) {
+    if (value instanceof Set) {
+        return [...value];
+    }
+    if (value instanceof Map) {
+        return Object.fromEntries(value);
+    }
+    return value;
+}
+/**
  * Executes a request to the AI Core service.
  * @param endpointOptions - The options to call an endpoint.
  * @param data - The input parameters for the request.
@@ -149390,7 +149406,7 @@ async function http_client_executeRequest(endpointOptions, data, requestConfig, 
         ...mergeWithDefaultRequestConfig(apiVersion, resourceGroup, requestConfig),
         data: data instanceof FormData || data instanceof Blob
             ? data
-            : JSON.stringify(data)
+            : JSON.stringify(data, jsonStringReplacer)
     };
     try {
         const response = await (0,http_client_dist.executeHttpRequest)({ ...aiCoreDestination, url: getTargetUrl(aiCoreDestination.url, url) }, mergedRequestConfig, {
@@ -149399,6 +149415,9 @@ async function http_client_executeRequest(endpointOptions, data, requestConfig, 
         return response;
     }
     catch (error) {
+        if (requestConfig?.signal?.aborted) {
+            throw new util_dist.ErrorWithCause('Request aborted.', error);
+        }
         // TODO: remove this after the axios issue (https://github.com/axios/axios/issues/6468) has been fixed.
         await handleStreamError(error);
         throw new util_dist.ErrorWithCause(`Request failed with status code ${error.status}.`, error);
@@ -150010,6 +150029,7 @@ function buildAzureContentSafetyFilter(type, config) {
  * @param type - Type of the filter, either `input` or `output`.
  * @param categories - Categories to be enabled for filtering. Provide at least one category.
  * @returns Llama Guard 3 8B filter configuration.
+ * @deprecated
  * @example buildLlamaGuard38BFilter('input', ['elections', 'hate'])
  */
 function buildLlamaGuard38BFilter(type, categories) {
@@ -150034,7 +150054,7 @@ function constructCompletionPostRequestFromJsonModuleConfig(config, prompt, stre
         config = {
             ...config,
             stream: {
-                ...(config.stream || {}),
+                ...config.stream,
                 enabled: true
             }
         };
@@ -150089,13 +150109,12 @@ function addStreamOptionsToPromptTemplatingModuleConfig(promptTemplatingModuleCo
         model: {
             ...promptTemplatingModuleConfig.model,
             params: {
-                ...(promptTemplatingModuleConfig.model.params || {}),
+                ...promptTemplatingModuleConfig.model.params,
                 ...(streamOptions?.promptTemplating !== null && {
                     stream_options: {
                         include_usage: true,
-                        ...(promptTemplatingModuleConfig.model.params?.stream_options ||
-                            {}),
-                        ...(streamOptions?.promptTemplating || {})
+                        ...promptTemplatingModuleConfig.model.params?.stream_options,
+                        ...streamOptions?.promptTemplating
                     }
                 })
             }
@@ -150109,7 +150128,7 @@ function addStreamOptionsToOutputFilteringConfig(outputFilteringConfig, filterin
     return {
         ...outputFilteringConfig,
         stream_options: {
-            ...(outputFilteringConfig.stream_options || {}),
+            ...outputFilteringConfig.stream_options,
             ...filteringStreamOptions
         }
     };
@@ -150221,7 +150240,7 @@ function addStreamOptions(moduleConfigs, streamOptions) {
     return {
         stream: {
             enabled: true,
-            ...(streamOptions?.global || {})
+            ...streamOptions?.global
         },
         modules: Array.isArray(moduleConfigs) ? modules : modules[0]
     };
@@ -150282,23 +150301,26 @@ function constructCompletionPostRequest(config, request, stream, streamOptions) 
         })
     };
 }
-function buildCompletionModulesConfig(config, request) {
-    const { promptTemplating, filtering, masking, grounding, translation } = config;
-    // prompt is not a string here as it is already parsed in `parseAndMergeTemplating` method
-    const prompt = {
-        ...promptTemplating.prompt
-    };
-    // If promptTemplating.prompt is not defined, we initialize it with an empty Template object
-    promptTemplating.prompt = promptTemplating.prompt || { template: [] };
+function resolvePromptTemplate(promptTemplating, messages) {
+    if (typeof promptTemplating.prompt === 'string') {
+        throw new TypeError('Prompt must be parsed before merging with messages.');
+    }
+    // If promptTemplating.prompt is not defined, we initialize it with an empty template object
+    const prompt = promptTemplating.prompt ?? { template: [] };
     if (isTemplate(prompt)) {
-        if (!prompt.template?.length && !request?.messages?.length) {
+        if (!prompt.template?.length && !messages?.length) {
             throw new Error('Either a prompt template or messages must be defined.');
         }
-        prompt.template = [
-            ...(prompt.template || []),
-            ...(request?.messages || [])
-        ];
+        return {
+            ...prompt,
+            template: [...(prompt.template || []), ...(messages || [])]
+        };
     }
+    return prompt;
+}
+function buildCompletionModulesConfig(config, request) {
+    const { promptTemplating, filtering, masking, grounding, translation } = config;
+    const prompt = resolvePromptTemplate(promptTemplating, request?.messages);
     return {
         prompt_templating: {
             ...promptTemplating,
@@ -150420,6 +150442,10 @@ function mergeTokenUsage(existing, incoming) {
         stream_logger.debug(`Token usage: ${JSON.stringify(incoming)}`);
     }
     return {
+        // Keep every field the service sent, e.g. `prompt_tokens_details` and
+        // `completion_tokens_details`, instead of only the three flat counters.
+        ...existing,
+        ...incoming,
         prompt_tokens: incoming?.prompt_tokens ?? existing?.prompt_tokens ?? 0,
         completion_tokens: incoming?.completion_tokens ?? existing?.completion_tokens ?? 0,
         total_tokens: incoming?.total_tokens ?? existing?.total_tokens ?? 0
@@ -152409,6 +152435,16 @@ const PromptTemplatesApi = {
         }
     }, PromptTemplatesApi._defaultBasePath),
     /**
+     * Delete all imperative prompt templates in the given scenario.
+     * @param scenario - Path parameter.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deletePromptTemplatesByScenario: (scenario, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/scenarios/{scenario}/promptTemplates', {
+        pathParameters: { scenario },
+        headerParameters
+    }, PromptTemplatesApi._defaultBasePath),
+    /**
      * List prompt template history
      * @param scenario - Path parameter.
      * @param version - Path parameter.
@@ -152421,6 +152457,18 @@ const PromptTemplatesApi = {
         pathParameters: { scenario, version, name },
         headerParameters,
         queryParameters
+    }, PromptTemplatesApi._defaultBasePath),
+    /**
+     * Delete all non-current versions (history) for the given prompt template
+     * @param scenario - Path parameter.
+     * @param version - Path parameter.
+     * @param name - Path parameter.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deletePromptTemplateHistory: (scenario, version, name, headerParameters) => new OpenApiRequestBuilder('delete', '/lm/scenarios/{scenario}/promptTemplates/{name}/versions/{version}/history', {
+        pathParameters: { scenario, version, name },
+        headerParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
      * Get prompt template by UUID
@@ -152549,6 +152597,16 @@ const OrchestrationConfigsApi = {
         }
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
+     * Delete all imperative orchestration configs in the given scenario.
+     * @param scenario - Path parameter.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deleteOrchestrationConfigsByScenario: (scenario, headerParameters) => new OpenApiRequestBuilder('delete', '/registry/v2/scenarios/{scenario}/orchestrationConfigs', {
+        pathParameters: { scenario },
+        headerParameters
+    }, OrchestrationConfigsApi._defaultBasePath),
+    /**
      * List orchestration config history
      * @param scenario - Path parameter.
      * @param version - Path parameter.
@@ -152561,6 +152619,18 @@ const OrchestrationConfigsApi = {
         pathParameters: { scenario, version, name },
         headerParameters,
         queryParameters
+    }, OrchestrationConfigsApi._defaultBasePath),
+    /**
+     * Delete all non-current versions (history) for the given orchestration config
+     * @param scenario - Path parameter.
+     * @param version - Path parameter.
+     * @param name - Path parameter.
+     * @param headerParameters - Object containing the following keys: AI-Resource-Group.
+     * @returns The request builder, use the `execute()` method to trigger the request.
+     */
+    deleteOrchestrationConfigHistory: (scenario, version, name, headerParameters) => new OpenApiRequestBuilder('delete', '/registry/v2/scenarios/{scenario}/orchestrationConfigs/{name}/versions/{version}/history', {
+        pathParameters: { scenario, version, name },
+        headerParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
      * Get orchestration config by UUID
@@ -152628,6 +152698,1010 @@ const OrchestrationConfigsApi = {
 
 
 //# sourceMappingURL=index.js.map
+;// CONCATENATED MODULE: ./node_modules/zod/v4/mini/schemas.js
+
+
+
+
+const ZodMiniType = /*@__PURE__*/ $constructor("ZodMiniType", (inst, def) => {
+    if (!inst._zod)
+        throw new Error("Uninitialized schema in ZodMiniType.");
+    $ZodType.init(inst, def);
+    inst.def = def;
+    inst.type = def.type;
+}, {
+    // `with` is an alias for `check`: the same function object, not a wrapper.
+    get with() {
+        return this.check;
+    },
+    set with(value) {
+        own(this, "with", value);
+    },
+    parse(data, params) {
+        return parse_parse(this, data, params, { callee: this.parse });
+    },
+    parseAsync(data, params) {
+        return parse_parseAsync(this, data, params, { callee: this.parseAsync });
+    },
+    safeParse(data, params) {
+        return safeParse(this, data, params);
+    },
+    safeParseAsync(data, params) {
+        return safeParseAsync(this, data, params);
+    },
+    check(...checks) {
+        const def = this.def;
+        return this.clone({
+            ...def,
+            checks: [
+                ...(def.checks ?? []),
+                ...checks.map((ch) => typeof ch === "function" ? { _zod: { check: ch, def: { check: "custom" }, onattach: [] } } : ch),
+            ],
+        }, { parent: true });
+    },
+    clone(_def, params) {
+        return clone(this, _def, params);
+    },
+    brand() {
+        return this;
+    },
+    register(reg, meta) {
+        reg.add(this, meta);
+        return this;
+    },
+    apply(fn, ...args) {
+        return args.length === 0 ? fn(this) : fn(this, ...args);
+    },
+});
+const ZodMiniString = /*@__PURE__*/ $constructor("ZodMiniString", (inst, def) => {
+    $ZodString.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_string(params) {
+    return _string(ZodMiniString, params);
+}
+const ZodMiniStringFormat = /*@__PURE__*/ $constructor("ZodMiniStringFormat", (inst, def) => {
+    $ZodStringFormat.init(inst, def);
+    ZodMiniString.init(inst, def);
+});
+const ZodMiniEmail = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniEmail", (inst, def) => {
+    core.$ZodEmail.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_email(params) {
+    return core._email(ZodMiniEmail, params);
+}
+const ZodMiniGUID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniGUID", (inst, def) => {
+    core.$ZodGUID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_guid(params) {
+    return core._guid(ZodMiniGUID, params);
+}
+const ZodMiniUUID = /*@__PURE__*/ $constructor("ZodMiniUUID", (inst, def) => {
+    $ZodUUID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_uuid(params) {
+    return _uuid(ZodMiniUUID, params);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_uuidv4(params) {
+    return core._uuidv4(ZodMiniUUID, params);
+}
+// ZodMiniUUIDv6
+// @__NO_SIDE_EFFECTS__
+function schemas_uuidv6(params) {
+    return core._uuidv6(ZodMiniUUID, params);
+}
+// ZodMiniUUIDv7
+// @__NO_SIDE_EFFECTS__
+function schemas_uuidv7(params) {
+    return core._uuidv7(ZodMiniUUID, params);
+}
+const ZodMiniURL = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniURL", (inst, def) => {
+    core.$ZodURL.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_url(params) {
+    return core._url(ZodMiniURL, params);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_httpUrl(params) {
+    return core._url(ZodMiniURL, {
+        protocol: regexes.httpProtocol,
+        hostname: regexes.domain,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniEmoji = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniEmoji", (inst, def) => {
+    core.$ZodEmoji.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_emoji(params) {
+    return core._emoji(ZodMiniEmoji, params);
+}
+const ZodMiniNanoID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniNanoID", (inst, def) => {
+    core.$ZodNanoID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_nanoid(params) {
+    return core._nanoid(ZodMiniNanoID, params);
+}
+/**
+ * @deprecated CUID v1 is deprecated by its authors due to information leakage
+ * (timestamps embedded in the id). Use {@link ZodMiniCUID2} instead.
+ * See https://github.com/paralleldrive/cuid.
+ */
+const ZodMiniCUID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCUID", (inst, def) => {
+    core.$ZodCUID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+/**
+ * Validates a CUID v1 string.
+ *
+ * @deprecated CUID v1 is deprecated by its authors due to information leakage
+ * (timestamps embedded in the id). Use {@link cuid2 | `z.cuid2()`} instead.
+ * See https://github.com/paralleldrive/cuid.
+ */
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_cuid(params) {
+    return core._cuid(ZodMiniCUID, params);
+}
+const ZodMiniCUID2 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCUID2", (inst, def) => {
+    core.$ZodCUID2.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_cuid2(params) {
+    return core._cuid2(ZodMiniCUID2, params);
+}
+const ZodMiniULID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniULID", (inst, def) => {
+    core.$ZodULID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_ulid(params) {
+    return core._ulid(ZodMiniULID, params);
+}
+const ZodMiniXID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniXID", (inst, def) => {
+    core.$ZodXID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_xid(params) {
+    return core._xid(ZodMiniXID, params);
+}
+const ZodMiniKSUID = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniKSUID", (inst, def) => {
+    core.$ZodKSUID.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_ksuid(params) {
+    return core._ksuid(ZodMiniKSUID, params);
+}
+const ZodMiniIPv4 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniIPv4", (inst, def) => {
+    core.$ZodIPv4.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_ipv4(params) {
+    return core._ipv4(ZodMiniIPv4, params);
+}
+const ZodMiniIPv6 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniIPv6", (inst, def) => {
+    core.$ZodIPv6.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_ipv6(params) {
+    return core._ipv6(ZodMiniIPv6, params);
+}
+const ZodMiniCIDRv4 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCIDRv4", (inst, def) => {
+    core.$ZodCIDRv4.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_cidrv4(params) {
+    return core._cidrv4(ZodMiniCIDRv4, params);
+}
+const ZodMiniCIDRv6 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCIDRv6", (inst, def) => {
+    core.$ZodCIDRv6.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_cidrv6(params) {
+    return core._cidrv6(ZodMiniCIDRv6, params);
+}
+const ZodMiniMAC = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniMAC", (inst, def) => {
+    core.$ZodMAC.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_mac(params) {
+    return core._mac(ZodMiniMAC, params);
+}
+const ZodMiniBase64 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniBase64", (inst, def) => {
+    core.$ZodBase64.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_base64(params) {
+    return core._base64(ZodMiniBase64, params);
+}
+const ZodMiniBase64URL = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniBase64URL", (inst, def) => {
+    core.$ZodBase64URL.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_base64url(params) {
+    return core._base64url(ZodMiniBase64URL, params);
+}
+const ZodMiniE164 = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniE164", (inst, def) => {
+    core.$ZodE164.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_e164(params) {
+    return core._e164(ZodMiniE164, params);
+}
+const ZodMiniCreditCard = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCreditCard", (inst, def) => {
+    core.$ZodCreditCard.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_creditCard(params) {
+    return core._creditCard(ZodMiniCreditCard, params);
+}
+const ZodMiniIBAN = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniIBAN", (inst, def) => {
+    core.$ZodIBAN.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_iban(params) {
+    return core._iban(ZodMiniIBAN, params);
+}
+const ZodMiniJWT = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniJWT", (inst, def) => {
+    core.$ZodJWT.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_jwt(params) {
+    return core._jwt(ZodMiniJWT, params);
+}
+const ZodMiniCustomStringFormat = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCustomStringFormat", (inst, def) => {
+    core.$ZodCustomStringFormat.init(inst, def);
+    ZodMiniStringFormat.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_stringFormat(format, fnOrRegex, _params = {}) {
+    return core._stringFormat(ZodMiniCustomStringFormat, format, fnOrRegex, _params);
+}
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_hostname(_params) {
+    return core._stringFormat(ZodMiniCustomStringFormat, "hostname", regexes.hostname, _params);
+}
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_hex(_params) {
+    return core._stringFormat(ZodMiniCustomStringFormat, "hex", regexes.hex, _params);
+}
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_currencyCode(_params) {
+    return core._stringFormat(ZodMiniCustomStringFormat, "currency_code", regexes.currencyCode, _params);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_hash(alg, params) {
+    const enc = params?.enc ?? "hex";
+    const format = `${alg}_${enc}`;
+    const regex = core.regexes[format];
+    // check for unrecognized format
+    if (!regex)
+        throw new Error(`Unrecognized hash format: ${format}`);
+    return core._stringFormat(ZodMiniCustomStringFormat, format, regex, params);
+}
+const ZodMiniNumber = /*@__PURE__*/ $constructor("ZodMiniNumber", (inst, def) => {
+    $ZodNumber.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_number(params) {
+    return core._number(ZodMiniNumber, params);
+}
+const ZodMiniNumberFormat = /*@__PURE__*/ $constructor("ZodMiniNumberFormat", (inst, def) => {
+    $ZodNumberFormat.init(inst, def);
+    ZodMiniNumber.init(inst, def);
+});
+function mini_schemas_int(params) {
+    return _int(ZodMiniNumberFormat, params);
+}
+function schemas_float32(params) {
+    return core._float32(ZodMiniNumberFormat, params);
+}
+function schemas_float64(params) {
+    return core._float64(ZodMiniNumberFormat, params);
+}
+function schemas_int32(params) {
+    return core._int32(ZodMiniNumberFormat, params);
+}
+function schemas_uint32(params) {
+    return core._uint32(ZodMiniNumberFormat, params);
+}
+const ZodMiniBoolean = /*@__PURE__*/ $constructor("ZodMiniBoolean", (inst, def) => {
+    $ZodBoolean.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_boolean(params) {
+    return _boolean(ZodMiniBoolean, params);
+}
+const ZodMiniBigInt = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniBigInt", (inst, def) => {
+    core.$ZodBigInt.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_bigint(params) {
+    return core._bigint(ZodMiniBigInt, params);
+}
+const ZodMiniBigIntFormat = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniBigIntFormat", (inst, def) => {
+    core.$ZodBigIntFormat.init(inst, def);
+    ZodMiniBigInt.init(inst, def);
+})));
+function schemas_int64(params) {
+    return core._int64(ZodMiniBigIntFormat, params);
+}
+function schemas_uint64(params) {
+    return core._uint64(ZodMiniBigIntFormat, params);
+}
+const ZodMiniSymbol = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniSymbol", (inst, def) => {
+    core.$ZodSymbol.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_symbol(params) {
+    return core._symbol(ZodMiniSymbol, params);
+}
+const ZodMiniUndefined = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniUndefined", (inst, def) => {
+    core.$ZodUndefined.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_undefined(params) {
+    return core._undefined(ZodMiniUndefined, params);
+}
+
+const ZodMiniNull = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniNull", (inst, def) => {
+    core.$ZodNull.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_null(params) {
+    return core._null(ZodMiniNull, params);
+}
+
+const ZodMiniAny = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniAny", (inst, def) => {
+    core.$ZodAny.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_any() {
+    return core._any(ZodMiniAny);
+}
+const ZodMiniUnknown = /*@__PURE__*/ $constructor("ZodMiniUnknown", (inst, def) => {
+    $ZodUnknown.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_unknown() {
+    return _unknown(ZodMiniUnknown);
+}
+const ZodMiniNever = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniNever", (inst, def) => {
+    core.$ZodNever.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_never(params) {
+    return core._never(ZodMiniNever, params);
+}
+const ZodMiniVoid = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniVoid", (inst, def) => {
+    core.$ZodVoid.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_void(params) {
+    return core._void(ZodMiniVoid, params);
+}
+
+const ZodMiniDate = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniDate", (inst, def) => {
+    core.$ZodDate.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_date(params) {
+    return core._date(ZodMiniDate, params);
+}
+const ZodMiniArray = /*@__PURE__*/ $constructor("ZodMiniArray", (inst, def) => {
+    $ZodArray.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_array(element, params) {
+    return new ZodMiniArray({
+        type: "array",
+        element: element,
+        ...normalizeParams(params),
+    });
+}
+// .keyof
+// @__NO_SIDE_EFFECTS__
+function schemas_keyof(schema) {
+    const shape = schema._zod.def.shape;
+    return mini_schemas_enum(Object.keys(shape));
+}
+const ZodMiniObject = /*@__PURE__*/ $constructor("ZodMiniObject", (inst, def) => {
+    $ZodObject.init(inst, def);
+    ZodMiniType.init(inst, def);
+    installLazyProp(inst, "shape", (self) => self._zod.def.shape, false);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_object(shape, params) {
+    const def = {
+        type: "object",
+        shape: shape ?? {},
+        ...normalizeParams(params),
+    };
+    return new ZodMiniObject(def);
+}
+// strictObject
+// @__NO_SIDE_EFFECTS__
+function schemas_strictObject(shape, params) {
+    return new ZodMiniObject({
+        type: "object",
+        shape,
+        catchall: schemas_never(),
+        ...util.normalizeParams(params),
+    });
+}
+// looseObject
+// @__NO_SIDE_EFFECTS__
+function schemas_looseObject(shape, params) {
+    return new ZodMiniObject({
+        type: "object",
+        shape,
+        catchall: schemas_unknown(),
+        ...normalizeParams(params),
+    });
+}
+// object methods
+// @__NO_SIDE_EFFECTS__
+function schemas_extend(schema, shape) {
+    return util.extend(schema, shape);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_safeExtend(schema, shape) {
+    return util.safeExtend(schema, shape);
+}
+/**
+ * @deprecated Use [`z.extend(A, B.shape)`](https://zod.dev/api?id=extend) instead.
+ */
+// @__NO_SIDE_EFFECTS__
+function schemas_merge(a, b) {
+    return util.merge(a, b);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_pick(schema, mask) {
+    return util.pick(schema, mask);
+}
+// .omit
+// @__NO_SIDE_EFFECTS__
+function schemas_omit(schema, mask) {
+    return util.omit(schema, mask);
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_partial(schema, mask) {
+    const def = schema._zod.def;
+    if (def.type !== "tuple")
+        return util.partial(ZodMiniOptional, schema, mask);
+    // a refinement was authored against the full arity; partialing would run it on a shorter array
+    if (def.checks?.length)
+        throw new Error(".partial() cannot be used on tuple schemas containing refinements");
+    return util.clone(schema, {
+        ...def,
+        items: def.items.map((item) => new ZodMiniOptional({ type: "optional", innerType: item })),
+    });
+}
+// @__NO_SIDE_EFFECTS__
+function exactPartial(schema, mask) {
+    return util.partial(ZodMiniExactOptional, schema, mask, "exactPartial");
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_required(schema, mask) {
+    return util.required(ZodMiniNonOptional, schema, mask);
+}
+// @__NO_SIDE_EFFECTS__
+function catchall(inst, catchall) {
+    // `mergeDefs` rather than a spread: spreading reads `shape`, and resolving it can mint a whole fresh subtree
+    return inst.clone(mergeDefs(inst._zod.def, { catchall: catchall }));
+}
+const ZodMiniUnion = /*@__PURE__*/ $constructor("ZodMiniUnion", (inst, def) => {
+    $ZodUnion.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_union(options, params) {
+    return new ZodMiniUnion({
+        type: "union",
+        options: options,
+        ...normalizeParams(params),
+    });
+}
+const ZodMiniXor = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniXor", (inst, def) => {
+    ZodMiniUnion.init(inst, def);
+    core.$ZodXor.init(inst, def);
+})));
+/** Creates an exclusive union (XOR) where exactly one option must match.
+ * Unlike regular unions that succeed when any option matches, xor fails if
+ * zero or more than one option matches the input. */
+function schemas_xor(options, params) {
+    return new ZodMiniXor({
+        type: "union",
+        options: options,
+        inclusive: false,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniDiscriminatedUnion = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniDiscriminatedUnion", (inst, def) => {
+    core.$ZodDiscriminatedUnion.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_discriminatedUnion(discriminator, options, params) {
+    return new ZodMiniDiscriminatedUnion({
+        type: "union",
+        options: options,
+        discriminator,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniIntersection = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniIntersection", (inst, def) => {
+    core.$ZodIntersection.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_intersection(left, right) {
+    return new ZodMiniIntersection({
+        type: "intersection",
+        left: left,
+        right: right,
+    });
+}
+const ZodMiniTuple = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniTuple", (inst, def) => {
+    core.$ZodTuple.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_tuple(items, _paramsOrRest, _params) {
+    const hasRest = _paramsOrRest instanceof core.$ZodType;
+    const params = hasRest ? _params : _paramsOrRest;
+    const rest = hasRest ? _paramsOrRest : null;
+    return new ZodMiniTuple({
+        type: "tuple",
+        items: items,
+        rest,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniRecord = /*@__PURE__*/ $constructor("ZodMiniRecord", (inst, def) => {
+    $ZodRecord.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_record(keyType, valueType, params) {
+    // v3-compat: z.record(valueType, params?) — defaults keyType to z.string()
+    if (!valueType || !valueType._zod) {
+        return new ZodMiniRecord({
+            type: "record",
+            keyType: mini_schemas_string(),
+            valueType: keyType,
+            ...normalizeParams(valueType),
+        });
+    }
+    return new ZodMiniRecord({
+        type: "record",
+        keyType,
+        valueType: valueType,
+        ...normalizeParams(params),
+    });
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_partialRecord(keyType, valueType, params) {
+    return new ZodMiniRecord({
+        type: "record",
+        keyType,
+        valueType: valueType,
+        ...util.normalizeParams(params),
+        partial: true,
+    });
+}
+function schemas_looseRecord(keyType, valueType, params) {
+    return new ZodMiniRecord({
+        type: "record",
+        keyType,
+        valueType: valueType,
+        mode: "loose",
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniMap = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniMap", (inst, def) => {
+    core.$ZodMap.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_map(keyType, valueType, params) {
+    return new ZodMiniMap({
+        type: "map",
+        keyType: keyType,
+        valueType: valueType,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniSet = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniSet", (inst, def) => {
+    core.$ZodSet.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_set(valueType, params) {
+    return new ZodMiniSet({
+        type: "set",
+        valueType: valueType,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniEnum = /*@__PURE__*/ $constructor("ZodMiniEnum", (inst, def) => {
+    $ZodEnum.init(inst, def);
+    ZodMiniType.init(inst, def);
+    // reuse the parsed value set so a numeric TS enum's reverse-mapping keys stay out
+    inst.options = [...inst._zod.values];
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_enum(values, params) {
+    const entries = Array.isArray(values) ? Object.fromEntries(values.map((v) => [v, v])) : values;
+    return new ZodMiniEnum({
+        type: "enum",
+        entries,
+        ...normalizeParams(params),
+    });
+}
+
+// @__NO_SIDE_EFFECTS__
+/** @deprecated This API has been merged into `z.enum()`. Use `z.enum()` instead.
+ *
+ * ```ts
+ * enum Colors { red, green, blue }
+ * z.enum(Colors);
+ * ```
+ */
+function schemas_nativeEnum(entries, params) {
+    return new ZodMiniEnum({
+        type: "enum",
+        entries,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniLiteral = /*@__PURE__*/ $constructor("ZodMiniLiteral", (inst, def) => {
+    $ZodLiteral.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_literal(value, params) {
+    return new ZodMiniLiteral({
+        type: "literal",
+        values: Array.isArray(value) ? value : [value],
+        ...normalizeParams(params),
+    });
+}
+const ZodMiniFile = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniFile", (inst, def) => {
+    core.$ZodFile.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_file(params) {
+    return core._file(ZodMiniFile, params);
+}
+const ZodMiniTransform = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniTransform", (inst, def) => {
+    core.$ZodTransform.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_transform(fn) {
+    return new ZodMiniTransform({
+        type: "transform",
+        transform: fn,
+    });
+}
+const ZodMiniOptional = /*@__PURE__*/ $constructor("ZodMiniOptional", (inst, def) => {
+    $ZodOptional.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_optional(innerType) {
+    return new ZodMiniOptional({
+        type: "optional",
+        innerType: innerType,
+    });
+}
+const ZodMiniExactOptional = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniExactOptional", (inst, def) => {
+    core.$ZodExactOptional.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_exactOptional(innerType) {
+    return new ZodMiniExactOptional({
+        type: "optional",
+        innerType: innerType,
+    });
+}
+const ZodMiniNullable = /*@__PURE__*/ $constructor("ZodMiniNullable", (inst, def) => {
+    $ZodNullable.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function schemas_nullable(innerType) {
+    return new ZodMiniNullable({
+        type: "nullable",
+        innerType: innerType,
+    });
+}
+// nullish
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_nullish(innerType) {
+    return schemas_optional(schemas_nullable(innerType));
+}
+const ZodMiniDefault = /*@__PURE__*/ $constructor("ZodMiniDefault", (inst, def) => {
+    $ZodDefault.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_default(innerType, defaultValue) {
+    return new ZodMiniDefault({
+        type: "default",
+        innerType: innerType,
+        get defaultValue() {
+            return typeof defaultValue === "function" ? defaultValue() : shallowClone(defaultValue);
+        },
+    });
+}
+const ZodMiniPrefault = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniPrefault", (inst, def) => {
+    core.$ZodPrefault.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_prefault(innerType, defaultValue) {
+    return new ZodMiniPrefault({
+        type: "prefault",
+        innerType: innerType,
+        get defaultValue() {
+            return typeof defaultValue === "function" ? defaultValue() : util.shallowClone(defaultValue);
+        },
+    });
+}
+const ZodMiniNonOptional = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniNonOptional", (inst, def) => {
+    core.$ZodNonOptional.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_nonoptional(innerType, params) {
+    return new ZodMiniNonOptional({
+        type: "nonoptional",
+        innerType: innerType,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniSuccess = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniSuccess", (inst, def) => {
+    core.$ZodSuccess.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_success(innerType) {
+    return new ZodMiniSuccess({
+        type: "success",
+        innerType: innerType,
+    });
+}
+const ZodMiniCatch = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCatch", (inst, def) => {
+    core.$ZodCatch.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function mini_schemas_catch(innerType, catchValue) {
+    return new ZodMiniCatch({
+        type: "catch",
+        innerType: innerType,
+        catchValue: (typeof catchValue === "function" ? catchValue : core.util.constantCatch(catchValue)),
+    });
+}
+
+const ZodMiniNaN = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniNaN", (inst, def) => {
+    core.$ZodNaN.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_nan(params) {
+    return core._nan(ZodMiniNaN, params);
+}
+const ZodMiniPipe = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniPipe", (inst, def) => {
+    core.$ZodPipe.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_pipe(in_, out) {
+    return new ZodMiniPipe({
+        type: "pipe",
+        in: in_,
+        out: out,
+    });
+}
+const ZodMiniCodec = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniCodec", (inst, def) => {
+    ZodMiniPipe.init(inst, def);
+    core.$ZodCodec.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_codec(in_, out, params) {
+    return new ZodMiniCodec({
+        type: "pipe",
+        in: in_,
+        out: out,
+        transform: params.decode,
+        reverseTransform: params.encode,
+    });
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_invertCodec(codec) {
+    const def = codec._zod.def;
+    return new ZodMiniCodec({
+        type: "pipe",
+        in: def.out,
+        out: def.in,
+        transform: def.reverseTransform,
+        reverseTransform: def.transform,
+    });
+}
+const ZodMiniReadonly = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniReadonly", (inst, def) => {
+    core.$ZodReadonly.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_readonly(innerType) {
+    return new ZodMiniReadonly({
+        type: "readonly",
+        innerType: innerType,
+    });
+}
+const ZodMiniTemplateLiteral = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniTemplateLiteral", (inst, def) => {
+    core.$ZodTemplateLiteral.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_templateLiteral(parts, params) {
+    return new ZodMiniTemplateLiteral({
+        type: "template_literal",
+        parts,
+        ...util.normalizeParams(params),
+    });
+}
+const ZodMiniLazy = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniLazy", (inst, def) => {
+    core.$ZodLazy.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// export function lazy<T extends object>(getter: () => T): T {
+//   return util.createTransparentProxy<T>(getter);
+// }
+// @__NO_SIDE_EFFECTS__
+function schemas_lazy(getter) {
+    return new ZodMiniLazy({
+        type: "lazy",
+        getter: getter,
+    });
+}
+
+const ZodMiniPromise = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniPromise", (inst, def) => {
+    core.$ZodPromise.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_promise(innerType) {
+    return new ZodMiniPromise({
+        type: "promise",
+        innerType: innerType,
+    });
+}
+const ZodMiniCustom = /*@__PURE__*/ $constructor("ZodMiniCustom", (inst, def) => {
+    $ZodCustom.init(inst, def);
+    ZodMiniType.init(inst, def);
+});
+// custom checks
+// @__NO_SIDE_EFFECTS__
+function schemas_check(fn, params) {
+    const ch = new core.$ZodCheck({
+        check: "custom",
+        ...util.normalizeParams(params),
+    });
+    ch._zod.check = fn;
+    return ch;
+}
+// ZodCustom custom schema
+// @__NO_SIDE_EFFECTS__
+function schemas_custom(fn, _params) {
+    return _custom(ZodMiniCustom, fn ?? (() => true), _params);
+}
+// refine
+// @__NO_SIDE_EFFECTS__
+function schemas_refine(fn, _params = {}) {
+    return core._refine(ZodMiniCustom, fn, _params);
+}
+// superRefine
+// @__NO_SIDE_EFFECTS__
+function schemas_superRefine(fn, params) {
+    return core._superRefine(fn, params);
+}
+// Re-export describe and meta from core
+const mini_schemas_describe = describe;
+const mini_schemas_meta = meta;
+// instanceof
+class schemas_Class {
+    constructor(..._args) { }
+}
+// @__NO_SIDE_EFFECTS__
+function schemas_instanceof(cls, params = {}) {
+    const inst = schemas_custom((data) => data instanceof cls, params);
+    inst._zod.bag.Class = cls;
+    // Override check to emit invalid_type instead of custom
+    inst._zod.check = (payload) => {
+        if (!(payload.value instanceof cls)) {
+            payload.issues.push({
+                code: "invalid_type",
+                expected: cls.name,
+                input: payload.value,
+                inst,
+                path: [...(inst._zod.def.path ?? [])],
+            });
+        }
+    };
+    return inst;
+}
+
+// stringbool
+const schemas_stringbool = (...args) => core._stringbool({
+    Codec: ZodMiniCodec,
+    Boolean: ZodMiniBoolean,
+    String: ZodMiniString,
+}, ...args);
+// @__NO_SIDE_EFFECTS__
+function schemas_json() {
+    const jsonSchema = schemas_lazy(() => {
+        return schemas_union([mini_schemas_string(), mini_schemas_number(), mini_schemas_boolean(), mini_schemas_null(), schemas_array(jsonSchema), schemas_record(mini_schemas_string(), jsonSchema)]);
+    });
+    return jsonSchema;
+}
+const ZodMiniFunction = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodMiniFunction", (inst, def) => {
+    core.$ZodFunction.init(inst, def);
+    ZodMiniType.init(inst, def);
+})));
+// @__NO_SIDE_EFFECTS__
+function schemas_function(params) {
+    return new ZodMiniFunction({
+        type: "function",
+        input: Array.isArray(params?.input) ? schemas_tuple(params?.input) : (params?.input ?? schemas_array(schemas_unknown())),
+        output: params?.output ?? schemas_unknown(),
+    });
+}
+
+
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/prompt-registry.zod.js
 /**
  * Generated by orval 🍺
@@ -152640,9 +153714,9 @@ const OrchestrationConfigsApi = {
 /**
  * Create or update a prompt template
  */
-const RegistryControllerPromptControllerCreateUpdatePromptTemplateHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerCreateUpdatePromptTemplateHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
 const registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameMax = 120;
 const registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameRegExp = new RegExp('^[a-zA-Z0-9_-]+$');
@@ -152657,59 +153731,59 @@ const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecRespon
 const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerCreateUpdatePromptTemplateBody = object({
-    "name": schemas_string().max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameMax).regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameRegExp),
-    "version": schemas_string().max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionMax).regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionRegExp),
-    "scenario": schemas_string().max(registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioMax).regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioRegExp),
-    "spec": object({
-        "template": array(union([object({
-                "role": schemas_string(),
-                "content": schemas_string()
-            }), object({
-                "role": schemas_string(),
-                "content": array(union([object({
-                        "type": schemas_enum(['image_url']),
-                        "image_url": object({
-                            "url": schemas_string(),
-                            "detail": schemas_string().default(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerCreateUpdatePromptTemplateBody = /*#__PURE__*/ schemas_object({
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyNameRegExp)),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyVersionRegExp)),
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodyScenarioRegExp)),
+    "spec": /*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+        "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "role": /*#__PURE__*/ mini_schemas_string(),
+                "content": /*#__PURE__*/ mini_schemas_string()
+            }), /*#__PURE__*/ schemas_object({
+                "role": /*#__PURE__*/ mini_schemas_string(),
+                "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                        "image_url": /*#__PURE__*/ schemas_object({
+                            "url": /*#__PURE__*/ mini_schemas_string(),
+                            "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                         })
-                    }), object({
-                        "type": schemas_enum(['text']),
-                        "text": schemas_string()
+                    }), /*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                        "text": /*#__PURE__*/ mini_schemas_string()
                     })]))
             })])),
-        "defaults": looseObject({}).optional(),
-        "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-        "response_format": union([object({
-                "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-            }), object({
-                "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-            }), object({
-                "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                "json_schema": object({
-                    "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                    "name": schemas_string().max(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+        "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+        "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+        "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+            }), /*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+            }), /*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                "json_schema": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                 })
-            })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-        "tools": array(object({
-            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-            "function": object({
-                "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                "name": schemas_string().max(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                "strict": schemas_boolean().nullish().default(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+            })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+        "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+            "function": /*#__PURE__*/ schemas_object({
+                "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerCreateUpdatePromptTemplateBodySpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
             })
-        })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-    })
+        }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+    }), /*#__PURE__*/ schemas_looseObject({}))
 });
-const RegistryControllerPromptControllerCreateUpdatePromptTemplateResponse = object({
-    "message": schemas_string(),
-    "id": schemas_uuid(),
-    "scenario": schemas_string(),
-    "name": schemas_string(),
-    "version": schemas_string()
+const RegistryControllerPromptControllerCreateUpdatePromptTemplateResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "id": /*#__PURE__*/ mini_schemas_uuid(),
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * List prompt templates
@@ -152719,18 +153793,18 @@ const registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefau
 const registryControllerPromptControllerListPromptTemplatesQueryTopMax = 500;
 const registryControllerPromptControllerListPromptTemplatesQuerySkipDefault = 0;
 const registryControllerPromptControllerListPromptTemplatesQuerySkipMin = 0;
-const RegistryControllerPromptControllerListPromptTemplatesQueryParams = object({
-    "scenario": schemas_string().optional(),
-    "name": schemas_string().optional(),
-    "version": schemas_string().optional(),
-    "retrieve": schemas_string().default(registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault),
-    "includeSpec": schemas_boolean().default(registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault),
-    "$top": schemas_int().min(1).max(registryControllerPromptControllerListPromptTemplatesQueryTopMax).optional().describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).'),
-    "$skip": schemas_int().min(registryControllerPromptControllerListPromptTemplatesQuerySkipMin).default(registryControllerPromptControllerListPromptTemplatesQuerySkipDefault).describe('Number of results to skip before returning the page.')
+const RegistryControllerPromptControllerListPromptTemplatesQueryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault),
+    "includeSpec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault),
+    "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerPromptControllerListPromptTemplatesQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
+    "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerPromptControllerListPromptTemplatesQuerySkipMin)), registryControllerPromptControllerListPromptTemplatesQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
-const RegistryControllerPromptControllerListPromptTemplatesHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerListPromptTemplatesHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
 const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault = `auto`;
 const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax = 64;
@@ -152739,79 +153813,109 @@ const registryControllerPromptControllerListPromptTemplatesResponseResourcesItem
 const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerListPromptTemplatesResponse = object({
-    "count": schemas_int(),
-    "resources": array(object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creationTimestamp": schemas_string().optional(),
-        "managedBy": schemas_string().optional(),
-        "isVersionHead": schemas_boolean().optional(),
-        "resourceGroupId": schemas_string().optional(),
-        "spec": object({
-            "template": array(union([object({
-                    "role": schemas_string(),
-                    "content": schemas_string()
-                }), object({
-                    "role": schemas_string(),
-                    "content": array(union([object({
-                            "type": schemas_enum(['image_url']),
-                            "image_url": object({
-                                "url": schemas_string(),
-                                "detail": schemas_string().default(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerListPromptTemplatesResponse = /*#__PURE__*/ schemas_object({
+    "count": /*#__PURE__*/ mini_schemas_int(),
+    "resources": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creationTimestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managedBy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "isVersionHead": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resourceGroupId": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ mini_schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                            "image_url": /*#__PURE__*/ schemas_object({
+                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                             })
-                        }), object({
-                            "type": schemas_enum(['text']),
-                            "text": schemas_string()
+                        }), /*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                            "text": /*#__PURE__*/ mini_schemas_string()
                         })]))
                 })])),
-            "defaults": looseObject({}).optional(),
-            "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-            "response_format": union([object({
-                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                }), object({
-                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                }), object({
-                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                    "json_schema": object({
-                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                        "name": schemas_string().max(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                        "strict": schemas_boolean().nullish().default(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+            "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                    "json_schema": /*#__PURE__*/ schemas_object({
+                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                     })
-                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-            "tools": array(object({
-                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                "function": object({
-                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                    "name": schemas_string().max(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                "function": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerListPromptTemplatesResponseResourcesItemSpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                 })
-            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-        }).optional()
+            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+        }), /*#__PURE__*/ schemas_looseObject({})))
     }))
+});
+/**
+ * Delete all imperative prompt templates in the given scenario.
+ */
+const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string()
+});
+const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
+});
+const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "deleted": /*#__PURE__*/ mini_schemas_int()
+});
+/**
+ * Delete all non-current versions (history) for the given prompt template
+ */
+const RegistryControllerPromptControllerDeletePromptTemplateHistoryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string()
+});
+const RegistryControllerPromptControllerDeletePromptTemplateHistoryHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
+});
+const RegistryControllerPromptControllerDeletePromptTemplateHistoryResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "deleted": /*#__PURE__*/ mini_schemas_int()
 });
 /**
  * List prompt template history
  */
-const RegistryControllerPromptControllerListPromptTemplateHistoryParams = object({
-    "scenario": schemas_string(),
-    "version": schemas_string(),
-    "name": schemas_string()
+const RegistryControllerPromptControllerListPromptTemplateHistoryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string()
 });
 const registryControllerPromptControllerListPromptTemplateHistoryQueryTopMax = 500;
 const registryControllerPromptControllerListPromptTemplateHistoryQuerySkipDefault = 0;
 const registryControllerPromptControllerListPromptTemplateHistoryQuerySkipMin = 0;
-const RegistryControllerPromptControllerListPromptTemplateHistoryQueryParams = object({
-    "$top": schemas_int().min(1).max(registryControllerPromptControllerListPromptTemplateHistoryQueryTopMax).optional().describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).'),
-    "$skip": schemas_int().min(registryControllerPromptControllerListPromptTemplateHistoryQuerySkipMin).default(registryControllerPromptControllerListPromptTemplateHistoryQuerySkipDefault).describe('Number of results to skip before returning the page.')
+const RegistryControllerPromptControllerListPromptTemplateHistoryQueryParams = /*#__PURE__*/ schemas_object({
+    "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerPromptControllerListPromptTemplateHistoryQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
+    "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerPromptControllerListPromptTemplateHistoryQuerySkipMin)), registryControllerPromptControllerListPromptTemplateHistoryQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
-const RegistryControllerPromptControllerListPromptTemplateHistoryHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerListPromptTemplateHistoryHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
 const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault = `auto`;
 const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax = 64;
@@ -152820,70 +153924,70 @@ const registryControllerPromptControllerListPromptTemplateHistoryResponseResourc
 const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerListPromptTemplateHistoryResponse = object({
-    "count": schemas_int(),
-    "resources": array(object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creationTimestamp": schemas_string().optional(),
-        "managedBy": schemas_string().optional(),
-        "isVersionHead": schemas_boolean().optional(),
-        "resourceGroupId": schemas_string().optional(),
-        "spec": object({
-            "template": array(union([object({
-                    "role": schemas_string(),
-                    "content": schemas_string()
-                }), object({
-                    "role": schemas_string(),
-                    "content": array(union([object({
-                            "type": schemas_enum(['image_url']),
-                            "image_url": object({
-                                "url": schemas_string(),
-                                "detail": schemas_string().default(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerListPromptTemplateHistoryResponse = /*#__PURE__*/ schemas_object({
+    "count": /*#__PURE__*/ mini_schemas_int(),
+    "resources": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creationTimestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managedBy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "isVersionHead": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resourceGroupId": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ mini_schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                            "image_url": /*#__PURE__*/ schemas_object({
+                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                             })
-                        }), object({
-                            "type": schemas_enum(['text']),
-                            "text": schemas_string()
+                        }), /*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                            "text": /*#__PURE__*/ mini_schemas_string()
                         })]))
                 })])),
-            "defaults": looseObject({}).optional(),
-            "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-            "response_format": union([object({
-                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                }), object({
-                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                }), object({
-                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                    "json_schema": object({
-                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                        "name": schemas_string().max(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                        "strict": schemas_boolean().nullish().default(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+            "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                    "json_schema": /*#__PURE__*/ schemas_object({
+                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                     })
-                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-            "tools": array(object({
-                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                "function": object({
-                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                    "name": schemas_string().max(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                "function": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerListPromptTemplateHistoryResponseResourcesItemSpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                 })
-            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-        }).optional()
+            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+        }), /*#__PURE__*/ schemas_looseObject({})))
     }))
 });
 /**
  * Get prompt template by UUID
  */
-const RegistryControllerPromptControllerGetPromptTemplateByUuidParams = object({
-    "promptTemplateId": schemas_uuid()
+const RegistryControllerPromptControllerGetPromptTemplateByUuidParams = /*#__PURE__*/ schemas_object({
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
 });
-const RegistryControllerPromptControllerGetPromptTemplateByUuidHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerGetPromptTemplateByUuidHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
 const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecTemplateItemTwoContentItemOneImageUrlDetailDefault = `auto`;
 const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaNameMax = 64;
@@ -152892,115 +153996,115 @@ const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecRespo
 const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerGetPromptTemplateByUuidResponse = object({
-    "id": schemas_uuid().optional(),
-    "name": schemas_string().optional(),
-    "version": schemas_string().optional(),
-    "scenario": schemas_string().optional(),
-    "creationTimestamp": schemas_string().optional(),
-    "managedBy": schemas_string().optional(),
-    "isVersionHead": schemas_boolean().optional(),
-    "resourceGroupId": schemas_string().optional(),
-    "spec": object({
-        "template": array(union([object({
-                "role": schemas_string(),
-                "content": schemas_string()
-            }), object({
-                "role": schemas_string(),
-                "content": array(union([object({
-                        "type": schemas_enum(['image_url']),
-                        "image_url": object({
-                            "url": schemas_string(),
-                            "detail": schemas_string().default(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerGetPromptTemplateByUuidResponse = /*#__PURE__*/ schemas_object({
+    "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "creationTimestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "managedBy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "isVersionHead": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "resourceGroupId": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+        "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "role": /*#__PURE__*/ mini_schemas_string(),
+                "content": /*#__PURE__*/ mini_schemas_string()
+            }), /*#__PURE__*/ schemas_object({
+                "role": /*#__PURE__*/ mini_schemas_string(),
+                "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                        "image_url": /*#__PURE__*/ schemas_object({
+                            "url": /*#__PURE__*/ mini_schemas_string(),
+                            "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                         })
-                    }), object({
-                        "type": schemas_enum(['text']),
-                        "text": schemas_string()
+                    }), /*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                        "text": /*#__PURE__*/ mini_schemas_string()
                     })]))
             })])),
-        "defaults": looseObject({}).optional(),
-        "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-        "response_format": union([object({
-                "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-            }), object({
-                "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-            }), object({
-                "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                "json_schema": object({
-                    "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                    "name": schemas_string().max(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+        "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+        "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+        "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+            }), /*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+            }), /*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                "json_schema": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                 })
-            })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-        "tools": array(object({
-            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-            "function": object({
-                "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                "name": schemas_string().max(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                "strict": schemas_boolean().nullish().default(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+            })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+        "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+            "function": /*#__PURE__*/ schemas_object({
+                "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerGetPromptTemplateByUuidResponseSpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
             })
-        })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-    }).optional()
+        }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+    }), /*#__PURE__*/ schemas_looseObject({})))
 });
 /**
  * Delete prompt template
  */
-const RegistryControllerPromptControllerDeletePromptTemplateParams = object({
-    "promptTemplateId": schemas_uuid()
+const RegistryControllerPromptControllerDeletePromptTemplateParams = /*#__PURE__*/ schemas_object({
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
 });
-const RegistryControllerPromptControllerDeletePromptTemplateHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerDeletePromptTemplateHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
-const RegistryControllerPromptControllerDeletePromptTemplateResponse = object({
-    "message": schemas_string()
+const RegistryControllerPromptControllerDeletePromptTemplateResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * Import prompt template
  */
-const RegistryControllerPromptControllerImportPromptTemplateHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerImportPromptTemplateHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
-const RegistryControllerPromptControllerImportPromptTemplateBody = object({
-    "file": _instanceof(File).optional()
+const RegistryControllerPromptControllerImportPromptTemplateBody = /*#__PURE__*/ schemas_object({
+    "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_instanceof(Blob))
 });
-const RegistryControllerPromptControllerImportPromptTemplateResponse = object({
-    "message": schemas_string(),
-    "id": schemas_uuid(),
-    "scenario": schemas_string(),
-    "name": schemas_string(),
-    "version": schemas_string()
+const RegistryControllerPromptControllerImportPromptTemplateResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "id": /*#__PURE__*/ mini_schemas_uuid(),
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * Export prompt template
  */
-const RegistryControllerPromptControllerExportPromptTemplateParams = object({
-    "promptTemplateId": schemas_uuid()
+const RegistryControllerPromptControllerExportPromptTemplateParams = /*#__PURE__*/ schemas_object({
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
 });
-const RegistryControllerPromptControllerExportPromptTemplateHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerExportPromptTemplateHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
-const RegistryControllerPromptControllerExportPromptTemplateResponse = unknown();
+const RegistryControllerPromptControllerExportPromptTemplateResponse = /*#__PURE__*/ (/* unused pure expression or super */ null && (zod.unknown()));
 /**
  * Parse prompt template by ID
  */
-const RegistryControllerPromptControllerParsePromptTemplateByIdParams = object({
-    "promptTemplateId": schemas_uuid()
+const RegistryControllerPromptControllerParsePromptTemplateByIdParams = /*#__PURE__*/ schemas_object({
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
 });
 const registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault = false;
-const RegistryControllerPromptControllerParsePromptTemplateByIdQueryParams = object({
-    "metadata": schemas_boolean().default(registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault)
+const RegistryControllerPromptControllerParsePromptTemplateByIdQueryParams = /*#__PURE__*/ schemas_object({
+    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault)
 });
-const RegistryControllerPromptControllerParsePromptTemplateByIdHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerParsePromptTemplateByIdHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
-const RegistryControllerPromptControllerParsePromptTemplateByIdBody = object({
-    "inputParams": looseObject({})
+const RegistryControllerPromptControllerParsePromptTemplateByIdBody = /*#__PURE__*/ schemas_object({
+    "inputParams": /*#__PURE__*/ schemas_looseObject({})
 });
 const registryControllerPromptControllerParsePromptTemplateByIdResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault = `auto`;
 const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault = `auto`;
@@ -153010,94 +154114,94 @@ const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceS
 const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerParsePromptTemplateByIdResponse = object({
-    "parsedPrompt": array(union([object({
-            "role": schemas_string(),
-            "content": schemas_string()
-        }), object({
-            "role": schemas_string(),
-            "content": array(union([object({
-                    "type": schemas_enum(['image_url']),
-                    "image_url": object({
-                        "url": schemas_string(),
-                        "detail": schemas_string().default(registryControllerPromptControllerParsePromptTemplateByIdResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerParsePromptTemplateByIdResponse = /*#__PURE__*/ schemas_object({
+    "parsedPrompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+            "role": /*#__PURE__*/ mini_schemas_string(),
+            "content": /*#__PURE__*/ mini_schemas_string()
+        }), /*#__PURE__*/ schemas_object({
+            "role": /*#__PURE__*/ mini_schemas_string(),
+            "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                    "image_url": /*#__PURE__*/ schemas_object({
+                        "url": /*#__PURE__*/ mini_schemas_string(),
+                        "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerParsePromptTemplateByIdResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault)
                     })
-                }), object({
-                    "type": schemas_enum(['text']),
-                    "text": schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                    "text": /*#__PURE__*/ mini_schemas_string()
                 })]))
-        })])).optional(),
-    "resource": object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creationTimestamp": schemas_string().optional(),
-        "managedBy": schemas_string().optional(),
-        "isVersionHead": schemas_boolean().optional(),
-        "resourceGroupId": schemas_string().optional(),
-        "spec": object({
-            "template": array(union([object({
-                    "role": schemas_string(),
-                    "content": schemas_string()
-                }), object({
-                    "role": schemas_string(),
-                    "content": array(union([object({
-                            "type": schemas_enum(['image_url']),
-                            "image_url": object({
-                                "url": schemas_string(),
-                                "detail": schemas_string().default(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+        })]))),
+    "resource": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creationTimestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managedBy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "isVersionHead": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resourceGroupId": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ mini_schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                            "image_url": /*#__PURE__*/ schemas_object({
+                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                             })
-                        }), object({
-                            "type": schemas_enum(['text']),
-                            "text": schemas_string()
+                        }), /*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                            "text": /*#__PURE__*/ mini_schemas_string()
                         })]))
                 })])),
-            "defaults": looseObject({}).optional(),
-            "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-            "response_format": union([object({
-                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                }), object({
-                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                }), object({
-                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                    "json_schema": object({
-                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                        "name": schemas_string().max(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                        "strict": schemas_boolean().nullish().default(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+            "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                    "json_schema": /*#__PURE__*/ schemas_object({
+                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                     })
-                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-            "tools": array(object({
-                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                "function": object({
-                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                    "name": schemas_string().max(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                "function": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerParsePromptTemplateByIdResponseResourceSpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                 })
-            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-        }).optional()
-    }).optional()
+            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+        }), /*#__PURE__*/ schemas_looseObject({})))
+    }))
 });
 /**
  * Parse prompt template by name and version
  */
-const RegistryControllerPromptControllerParsePromptTemplateByNameVersionParams = object({
-    "scenario": schemas_string(),
-    "version": schemas_string(),
-    "name": schemas_string()
+const RegistryControllerPromptControllerParsePromptTemplateByNameVersionParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string()
 });
 const registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault = false;
-const RegistryControllerPromptControllerParsePromptTemplateByNameVersionQueryParams = object({
-    "metadata": schemas_boolean().default(registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault)
+const RegistryControllerPromptControllerParsePromptTemplateByNameVersionQueryParams = /*#__PURE__*/ schemas_object({
+    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault)
 });
-const RegistryControllerPromptControllerParsePromptTemplateByNameVersionHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use'),
-    "AI-Resource-Group-Scope": schemas_enum(['true', 'True', 'false', 'False']).optional().describe('Specify whether the resource group scope is to be used')
+const RegistryControllerPromptControllerParsePromptTemplateByNameVersionHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
+    "AI-Resource-Group-Scope": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['true', 'True', 'false', 'False'])).check(/*#__PURE__*/ mini_schemas_describe('Specify whether the resource group scope is to be used'))
 });
-const RegistryControllerPromptControllerParsePromptTemplateByNameVersionBody = object({
-    "inputParams": looseObject({})
+const RegistryControllerPromptControllerParsePromptTemplateByNameVersionBody = /*#__PURE__*/ schemas_object({
+    "inputParams": /*#__PURE__*/ schemas_looseObject({})
 });
 const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault = `auto`;
 const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault = `auto`;
@@ -153107,81 +154211,81 @@ const registryControllerPromptControllerParsePromptTemplateByNameVersionResponse
 const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameMax = 64;
 const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameRegExp = new RegExp('^[a-zA-Z0-9-_]+$');
 const registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionStrictDefault = false;
-const RegistryControllerPromptControllerParsePromptTemplateByNameVersionResponse = object({
-    "parsedPrompt": array(union([object({
-            "role": schemas_string(),
-            "content": schemas_string()
-        }), object({
-            "role": schemas_string(),
-            "content": array(union([object({
-                    "type": schemas_enum(['image_url']),
-                    "image_url": object({
-                        "url": schemas_string(),
-                        "detail": schemas_string().default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault)
+const RegistryControllerPromptControllerParsePromptTemplateByNameVersionResponse = /*#__PURE__*/ schemas_object({
+    "parsedPrompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+            "role": /*#__PURE__*/ mini_schemas_string(),
+            "content": /*#__PURE__*/ mini_schemas_string()
+        }), /*#__PURE__*/ schemas_object({
+            "role": /*#__PURE__*/ mini_schemas_string(),
+            "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                    "image_url": /*#__PURE__*/ schemas_object({
+                        "url": /*#__PURE__*/ mini_schemas_string(),
+                        "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerParsePromptTemplateByNameVersionResponseParsedPromptItemTwoContentItemOneImageUrlDetailDefault)
                     })
-                }), object({
-                    "type": schemas_enum(['text']),
-                    "text": schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                    "text": /*#__PURE__*/ mini_schemas_string()
                 })]))
-        })])).optional(),
-    "resource": object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creationTimestamp": schemas_string().optional(),
-        "managedBy": schemas_string().optional(),
-        "isVersionHead": schemas_boolean().optional(),
-        "resourceGroupId": schemas_string().optional(),
-        "spec": object({
-            "template": array(union([object({
-                    "role": schemas_string(),
-                    "content": schemas_string()
-                }), object({
-                    "role": schemas_string(),
-                    "content": array(union([object({
-                            "type": schemas_enum(['image_url']),
-                            "image_url": object({
-                                "url": schemas_string(),
-                                "detail": schemas_string().default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
+        })]))),
+    "resource": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creationTimestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managedBy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "isVersionHead": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resourceGroupId": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ catchall(/*#__PURE__*/ schemas_object({
+            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ mini_schemas_string()
+                }), /*#__PURE__*/ schemas_object({
+                    "role": /*#__PURE__*/ mini_schemas_string(),
+                    "content": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['image_url']),
+                            "image_url": /*#__PURE__*/ schemas_object({
+                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecTemplateItemTwoContentItemOneImageUrlDetailDefault)
                             })
-                        }), object({
-                            "type": schemas_enum(['text']),
-                            "text": schemas_string()
+                        }), /*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                            "text": /*#__PURE__*/ mini_schemas_string()
                         })]))
                 })])),
-            "defaults": looseObject({}).optional(),
-            "additionalFields": looseObject({}).optional().describe('DEPRECATED. Please use additional_fields instead.\n'),
-            "response_format": union([object({
-                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                }), object({
-                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                }), object({
-                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                    "json_schema": object({
-                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                        "name": schemas_string().max(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaNameMax).regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                        "strict": schemas_boolean().nullish().default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})),
+            "additionalFields": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_looseObject({})).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED. Please use additional_fields instead.\n')),
+            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                }), /*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                    "json_schema": /*#__PURE__*/ schemas_object({
+                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                     })
-                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n'),
-            "tools": array(object({
-                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                "function": object({
-                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                    "name": schemas_string().max(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameMax).regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                    "strict": schemas_boolean().nullish().default(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\nCompatible with GPT-4o, GPT-4o mini, GPT-4 (Turbo) and all GPT-3.5 Turbo models newer than gpt-3.5-turbo-1106.\n')),
+            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                "function": /*#__PURE__*/ schemas_object({
+                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerPromptControllerParsePromptTemplateByNameVersionResponseResourceSpecToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                 })
-            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-        }).optional()
-    }).optional()
+            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+        }), /*#__PURE__*/ schemas_looseObject({})))
+    }))
 });
 /**
  * Create or update an orchestration config
  */
-const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameMax = 120;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameRegExp = new RegExp('^[a-zA-Z0-9_-]+$');
@@ -153260,617 +154364,617 @@ const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamEnabledDefault = false;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeDefault = 100;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeMax = 10000;
-const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBody = object({
-    "name": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameRegExp),
-    "version": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyVersionMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyVersionRegExp),
-    "scenario": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyScenarioMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyScenarioRegExp),
-    "spec": object({
-        "modules": union([object({
-                "prompt_templating": object({
-                    "prompt": union([object({
-                            "template": array(union([object({
-                                    "role": schemas_enum(['system']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text', 'image_url', 'file']),
-                                            "text": schemas_string().optional(),
-                                            "image_url": object({
-                                                "url": schemas_string(),
-                                                "detail": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                            }).optional(),
-                                            "file": object({
-                                                "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                "filename": schemas_string().optional().describe('Name of the file')
-                                            }).optional(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]),
-                                    "role": schemas_enum(['user'])
-                                }), object({
-                                    "role": schemas_enum(['assistant']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]).optional(),
-                                    "refusal": schemas_string().optional(),
-                                    "tool_calls": array(object({
-                                        "id": schemas_string().describe('The ID of the tool call.'),
-                                        "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                        "function": object({
-                                            "name": schemas_string().describe('The name of the function to call.'),
-                                            "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                        }).describe('The function that the model called.')
-                                    })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                    "reasoning_content": array(object({
-                                        "content": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                        "signature": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                    })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                }), object({
-                                    "role": schemas_enum(['tool']),
-                                    "tool_call_id": schemas_string(),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "role": schemas_enum(['developer']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                            "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                            "response_format": union([object({
-                                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                }), object({
-                                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                }), object({
-                                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                    "json_schema": object({
-                                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBody = /*#__PURE__*/ schemas_object({
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyNameRegExp)),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyVersionMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyVersionRegExp)),
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyScenarioMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodyScenarioRegExp)),
+    "spec": /*#__PURE__*/ schemas_object({
+        "modules": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "prompt_templating": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                            "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                            "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                            })),
+                                            "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                            })),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))]),
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                    "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])),
+                                    "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                    "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                        "function": /*#__PURE__*/ schemas_object({
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                            "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                    "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                        "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                    "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                    "json_schema": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                     })
-                                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                            "tools": array(object({
-                                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                "function": object({
-                                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                    "name": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                    "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                "function": /*#__PURE__*/ schemas_object({
+                                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                 }),
-                                "cache_control": object({
-                                    "type": schemas_enum(['ephemeral']),
-                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                        }), object({
-                            "template_ref": union([object({
-                                    "id": schemas_string().describe('ID of the template in prompt registry'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                }), object({
-                                    "scenario": schemas_string().describe('Scenario name'),
-                                    "name": schemas_string().describe('Name of the template'),
-                                    "version": schemas_string().describe('Version of the template'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                        })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                    "model": object({
-                        "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                        "version": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                        "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                        "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                        "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                    }).optional().describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
-                }).optional().describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n'),
-                "filtering": object({
-                    "input": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                    }).optional().describe('List of provider type and filters'),
-                    "output": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                        "stream_options": object({
-                            "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                        }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                    }).optional().describe('List of provider type and filters')
-                }).optional(),
-                "masking": union([object({
-                        "providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers')
-                    }), object({
-                        "masking_providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                    })]).optional(),
-                "grounding": object({
-                    "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                    "config": object({
-                        "filters": array(object({
-                            "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                            "search_config": object({
-                                "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                            }).optional(),
-                            "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                            "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                            "data_repository_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                            })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                            "document_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                            })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                            "chunk_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                            })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                        })).optional().describe('Document grounding service filters to be used'),
-                        "placeholders": object({
-                            "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                            "output": schemas_string().describe('Placeholder name for grounding output')
-                        }).describe('Placeholders to be used for grounding input questions and output'),
-                        "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                        })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                    "model": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                        "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                        "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                        "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
+                "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                        "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                })),
+                "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                    }), /*#__PURE__*/ schemas_object({
+                        "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                    })])),
+                "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                    "config": /*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                            "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                            })),
+                            "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                            "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                            "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                            "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                            "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                        }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                        "placeholders": /*#__PURE__*/ schemas_object({
+                            "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                            "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                        "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                     })
-                }).optional(),
-                "translation": object({
-                    "input": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                        "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "apply_to": array(object({
-                                "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                            }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                            "target_language": schemas_string().describe('Language to which the text should be translated.')
-                        }).describe('Configuration for `sap_document_translation` translation provider.')
-                    }).optional().describe('Configuration for input translation'),
-                    "output": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                })),
+                "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                        "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                            "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                         })
-                    }).optional().describe('Configuration for output translation')
-                }).optional().describe('Configuration for translation module')
-            }).describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n'), array(object({
-                "prompt_templating": object({
-                    "prompt": union([object({
-                            "template": array(union([object({
-                                    "role": schemas_enum(['system']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text', 'image_url', 'file']),
-                                            "text": schemas_string().optional(),
-                                            "image_url": object({
-                                                "url": schemas_string(),
-                                                "detail": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                            }).optional(),
-                                            "file": object({
-                                                "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                "filename": schemas_string().optional().describe('Name of the file')
-                                            }).optional(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]),
-                                    "role": schemas_enum(['user'])
-                                }), object({
-                                    "role": schemas_enum(['assistant']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]).optional(),
-                                    "refusal": schemas_string().optional(),
-                                    "tool_calls": array(object({
-                                        "id": schemas_string().describe('The ID of the tool call.'),
-                                        "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                        "function": object({
-                                            "name": schemas_string().describe('The name of the function to call.'),
-                                            "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                        }).describe('The function that the model called.')
-                                    })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                    "reasoning_content": array(object({
-                                        "content": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                        "signature": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                    })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                }), object({
-                                    "role": schemas_enum(['tool']),
-                                    "tool_call_id": schemas_string(),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "role": schemas_enum(['developer']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                            "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                            "response_format": union([object({
-                                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                }), object({
-                                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                }), object({
-                                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                    "json_schema": object({
-                                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+            }).check(/*#__PURE__*/ mini_schemas_describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n')), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "prompt_templating": /*#__PURE__*/ schemas_object({
+                    "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                            "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                            "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                            })),
+                                            "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                            })),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))]),
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                    "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])),
+                                    "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                    "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                        "function": /*#__PURE__*/ schemas_object({
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                            "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                    "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                        "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                    "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                    "json_schema": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                     })
-                                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                            "tools": array(object({
-                                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                "function": object({
-                                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                    "name": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                    "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                "function": /*#__PURE__*/ schemas_object({
+                                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                 }),
-                                "cache_control": object({
-                                    "type": schemas_enum(['ephemeral']),
-                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                        }), object({
-                            "template_ref": union([object({
-                                    "id": schemas_string().describe('ID of the template in prompt registry'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                }), object({
-                                    "scenario": schemas_string().describe('Scenario name'),
-                                    "name": schemas_string().describe('Name of the template'),
-                                    "version": schemas_string().describe('Version of the template'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                        })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                    "model": object({
-                        "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                        "version": schemas_string().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                        "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                        "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                        "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                    }).describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
+                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                        })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                    "model": /*#__PURE__*/ schemas_object({
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                        "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                        "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                        "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                    }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 }),
-                "filtering": object({
-                    "input": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                    }).optional().describe('List of provider type and filters'),
-                    "output": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                        "stream_options": object({
-                            "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                        }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                    }).optional().describe('List of provider type and filters')
-                }).optional(),
-                "masking": union([object({
-                        "providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers')
-                    }), object({
-                        "masking_providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                    })]).optional(),
-                "grounding": object({
-                    "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                    "config": object({
-                        "filters": array(object({
-                            "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                            "search_config": object({
-                                "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                            }).optional(),
-                            "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                            "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                            "data_repository_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                            })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                            "document_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                            })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                            "chunk_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                            })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                        })).optional().describe('Document grounding service filters to be used'),
-                        "placeholders": object({
-                            "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                            "output": schemas_string().describe('Placeholder name for grounding output')
-                        }).describe('Placeholders to be used for grounding input questions and output'),
-                        "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                        "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                })),
+                "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                    }), /*#__PURE__*/ schemas_object({
+                        "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                    })])),
+                "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                    "config": /*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                            "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                            })),
+                            "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                            "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                            "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                            "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                            "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                        }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                        "placeholders": /*#__PURE__*/ schemas_object({
+                            "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                            "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                        "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                     })
-                }).optional(),
-                "translation": object({
-                    "input": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                        "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "apply_to": array(object({
-                                "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                            }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                            "target_language": schemas_string().describe('Language to which the text should be translated.')
-                        }).describe('Configuration for `sap_document_translation` translation provider.')
-                    }).optional().describe('Configuration for input translation'),
-                    "output": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                })),
+                "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                        "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                            "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                         })
-                    }).optional().describe('Configuration for output translation')
-                }).optional().describe('Configuration for translation module')
-            })).min(1).describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n')]).optional(),
-        "stream": object({
-            "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamEnabledDefault).describe('If true, the response will be streamed back to the client'),
-            "chunk_size": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeMax).default(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeDefault).describe('Minimum number of characters per chunk that post-LLM modules operate on.'),
-            "delimiters": array(schemas_string()).min(1).optional().describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.')
-        }).optional().describe('Options for streaming. Will be ignored if enabled is false.')
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n'))])),
+        "stream": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+            "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the response will be streamed back to the client')),
+            "chunk_size": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecStreamChunkSizeDefault).check(/*#__PURE__*/ mini_schemas_describe('Minimum number of characters per chunk that post-LLM modules operate on.')),
+            "delimiters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1))).check(/*#__PURE__*/ mini_schemas_describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.'))
+        })).check(/*#__PURE__*/ mini_schemas_describe('Options for streaming. Will be ignored if enabled is false.'))
     })
 });
-const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigResponse = object({
-    "message": schemas_string(),
-    "id": schemas_uuid(),
-    "scenario": schemas_string(),
-    "name": schemas_string(),
-    "version": schemas_string()
+const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "id": /*#__PURE__*/ mini_schemas_uuid(),
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * List orchestration configs
@@ -153881,20 +154985,20 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQue
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryTopMax = 500;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipMin = 0;
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryParams = object({
-    "scenario": schemas_string().optional(),
-    "name": schemas_string().optional(),
-    "version": schemas_string().optional(),
-    "retrieve": schemas_enum(['both', 'imperative', 'declarative']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryRetrieveDefault),
-    "include_spec": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryIncludeSpecDefault).describe('DEPRECATED: Use includeSpec instead'),
-    "includeSpec": schemas_boolean().optional(),
-    "resolve_template_ref": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryResolveTemplateRefDefault).describe('DEPRECATED: Use resolveTemplateRef instead'),
-    "resolveTemplateRef": schemas_boolean().optional(),
-    "$top": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryTopMax).optional().describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).'),
-    "$skip": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipMin).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipDefault).describe('Number of results to skip before returning the page.')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['both', 'imperative', 'declarative']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryRetrieveDefault),
+    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead')),
+    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
+    "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipMin)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault = `auto`;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault = ``;
@@ -153967,642 +155071,670 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamEnabledDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeDefault = 100;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeMax = 10000;
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsResponse = object({
-    "count": schemas_int(),
-    "resources": array(object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creation_timestamp": schemas_string().optional(),
-        "managed_by": schemas_string().optional(),
-        "is_version_head": schemas_boolean().optional(),
-        "resource_group_id": schemas_string().optional(),
-        "spec": object({
-            "modules": union([object({
-                    "prompt_templating": object({
-                        "prompt": union([object({
-                                "template": array(union([object({
-                                        "role": schemas_enum(['system']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text', 'image_url', 'file']),
-                                                "text": schemas_string().optional(),
-                                                "image_url": object({
-                                                    "url": schemas_string(),
-                                                    "detail": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                                }).optional(),
-                                                "file": object({
-                                                    "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                    "filename": schemas_string().optional().describe('Name of the file')
-                                                }).optional(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]),
-                                        "role": schemas_enum(['user'])
-                                    }), object({
-                                        "role": schemas_enum(['assistant']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]).optional(),
-                                        "refusal": schemas_string().optional(),
-                                        "tool_calls": array(object({
-                                            "id": schemas_string().describe('The ID of the tool call.'),
-                                            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                            "function": object({
-                                                "name": schemas_string().describe('The name of the function to call.'),
-                                                "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                            }).describe('The function that the model called.')
-                                        })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                        "reasoning_content": array(object({
-                                            "content": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                            "signature": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                        })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                    }), object({
-                                        "role": schemas_enum(['tool']),
-                                        "tool_call_id": schemas_string(),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "role": schemas_enum(['developer']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                                "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                                "response_format": union([object({
-                                        "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                    }), object({
-                                        "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                    }), object({
-                                        "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                        "json_schema": object({
-                                            "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                            "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                            "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                            "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsResponse = /*#__PURE__*/ schemas_object({
+    "count": /*#__PURE__*/ mini_schemas_int(),
+    "resources": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creation_timestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managed_by": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "is_version_head": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resource_group_id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+            "modules": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "prompt_templating": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                                "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                                "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "url": /*#__PURE__*/ mini_schemas_string(),
+                                                    "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                                })),
+                                                "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                    "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                                })),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))]),
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                        "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])),
+                                        "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                        "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                            "function": /*#__PURE__*/ schemas_object({
+                                                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                                "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                        "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                            "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                        "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                                "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                                "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                        "json_schema": /*#__PURE__*/ schemas_object({
+                                            "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                            "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                            "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                         })
-                                    })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                                "tools": array(object({
-                                    "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                    "function": object({
-                                        "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                                "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                    "function": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                     }),
-                                    "cache_control": object({
-                                        "type": schemas_enum(['ephemeral']),
-                                        "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                    }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                            }), object({
-                                "template_ref": union([object({
-                                        "id": schemas_string().describe('ID of the template in prompt registry'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    }), object({
-                                        "scenario": schemas_string().describe('Scenario name'),
-                                        "name": schemas_string().describe('Name of the template'),
-                                        "version": schemas_string().describe('Version of the template'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                            })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                        "model": object({
-                            "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                            "version": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                            "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                            "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                            "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                        }).optional().describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
-                    }).optional().describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n'),
-                    "filtering": object({
-                        "input": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                        }).optional().describe('List of provider type and filters'),
-                        "output": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                            "stream_options": object({
-                                "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                            }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                        }).optional().describe('List of provider type and filters')
-                    }).optional(),
-                    "masking": union([object({
-                            "providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers')
-                        }), object({
-                            "masking_providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                        })]).optional(),
-                    "grounding": object({
-                        "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                        "config": object({
-                            "filters": array(object({
-                                "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                                "search_config": object({
-                                    "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                    "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                                }).optional(),
-                                "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                                "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                                "data_repository_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                                })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                                "document_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                    "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                                })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                                "chunk_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                                })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                            })).optional().describe('Document grounding service filters to be used'),
-                            "placeholders": object({
-                                "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                                "output": schemas_string().describe('Placeholder name for grounding output')
-                            }).describe('Placeholders to be used for grounding input questions and output'),
-                            "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                                    "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                        "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                        "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                            })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                        "model": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                            "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                            "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                            "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
+                    "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                            "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                            })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                    })),
+                    "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                        })])),
+                    "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                                "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                    "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                                })),
+                                "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                                "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                                "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                                "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                    "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                                "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                            "placeholders": /*#__PURE__*/ schemas_object({
+                                "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                                "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                            "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                         })
-                    }).optional(),
-                    "translation": object({
-                        "input": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                            "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "apply_to": array(object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                                "target_language": schemas_string().describe('Language to which the text should be translated.')
-                            }).describe('Configuration for `sap_document_translation` translation provider.')
-                        }).optional().describe('Configuration for input translation'),
-                        "output": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                        "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                        "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                        "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                    }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                    })),
+                    "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                            "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                                "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                        "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                        "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                        "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                             })
-                        }).optional().describe('Configuration for output translation')
-                    }).optional().describe('Configuration for translation module')
-                }).describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n'), array(object({
-                    "prompt_templating": object({
-                        "prompt": union([object({
-                                "template": array(union([object({
-                                        "role": schemas_enum(['system']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text', 'image_url', 'file']),
-                                                "text": schemas_string().optional(),
-                                                "image_url": object({
-                                                    "url": schemas_string(),
-                                                    "detail": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                                }).optional(),
-                                                "file": object({
-                                                    "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                    "filename": schemas_string().optional().describe('Name of the file')
-                                                }).optional(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]),
-                                        "role": schemas_enum(['user'])
-                                    }), object({
-                                        "role": schemas_enum(['assistant']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]).optional(),
-                                        "refusal": schemas_string().optional(),
-                                        "tool_calls": array(object({
-                                            "id": schemas_string().describe('The ID of the tool call.'),
-                                            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                            "function": object({
-                                                "name": schemas_string().describe('The name of the function to call.'),
-                                                "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                            }).describe('The function that the model called.')
-                                        })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                        "reasoning_content": array(object({
-                                            "content": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                            "signature": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                        })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                    }), object({
-                                        "role": schemas_enum(['tool']),
-                                        "tool_call_id": schemas_string(),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "role": schemas_enum(['developer']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                                "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                                "response_format": union([object({
-                                        "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                    }), object({
-                                        "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                    }), object({
-                                        "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                        "json_schema": object({
-                                            "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                            "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                            "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                            "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+                }).check(/*#__PURE__*/ mini_schemas_describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n')), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                    "prompt_templating": /*#__PURE__*/ schemas_object({
+                        "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                                "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                                "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "url": /*#__PURE__*/ mini_schemas_string(),
+                                                    "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                                })),
+                                                "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                    "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                                })),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))]),
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                        "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])),
+                                        "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                        "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                            "function": /*#__PURE__*/ schemas_object({
+                                                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                                "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                        "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                            "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                        "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                                "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                                "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                        "json_schema": /*#__PURE__*/ schemas_object({
+                                            "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                            "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                            "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                         })
-                                    })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                                "tools": array(object({
-                                    "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                    "function": object({
-                                        "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                                "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                    "function": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                     }),
-                                    "cache_control": object({
-                                        "type": schemas_enum(['ephemeral']),
-                                        "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                    }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                            }), object({
-                                "template_ref": union([object({
-                                        "id": schemas_string().describe('ID of the template in prompt registry'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    }), object({
-                                        "scenario": schemas_string().describe('Scenario name'),
-                                        "name": schemas_string().describe('Name of the template'),
-                                        "version": schemas_string().describe('Version of the template'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                            })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                        "model": object({
-                            "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                            "version": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                            "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                            "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                            "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                        }).describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
+                                    "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                        "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                        "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                            })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                        "model": /*#__PURE__*/ schemas_object({
+                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                            "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                            "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                            "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     }),
-                    "filtering": object({
-                        "input": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                        }).optional().describe('List of provider type and filters'),
-                        "output": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                            "stream_options": object({
-                                "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                            }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                        }).optional().describe('List of provider type and filters')
-                    }).optional(),
-                    "masking": union([object({
-                            "providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers')
-                        }), object({
-                            "masking_providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                        })]).optional(),
-                    "grounding": object({
-                        "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                        "config": object({
-                            "filters": array(object({
-                                "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                                "search_config": object({
-                                    "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                    "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                                }).optional(),
-                                "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                                "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                                "data_repository_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                                })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                                "document_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                    "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                                })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                                "chunk_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                                })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                            })).optional().describe('Document grounding service filters to be used'),
-                            "placeholders": object({
-                                "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                                "output": schemas_string().describe('Placeholder name for grounding output')
-                            }).describe('Placeholders to be used for grounding input questions and output'),
-                            "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                    "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                            "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                            })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                    })),
+                    "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                        })])),
+                    "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                                "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                    "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                                })),
+                                "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                                "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                                "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                                "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                    "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                                "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                            "placeholders": /*#__PURE__*/ schemas_object({
+                                "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                                "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                            "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                         })
-                    }).optional(),
-                    "translation": object({
-                        "input": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                            "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "apply_to": array(object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                                "target_language": schemas_string().describe('Language to which the text should be translated.')
-                            }).describe('Configuration for `sap_document_translation` translation provider.')
-                        }).optional().describe('Configuration for input translation'),
-                        "output": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                        "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                        "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                        "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                    }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                    })),
+                    "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                            "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                                "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                        "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                        "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                        "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                             })
-                        }).optional().describe('Configuration for output translation')
-                    }).optional().describe('Configuration for translation module')
-                })).min(1).describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n')]).optional(),
-            "stream": object({
-                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamEnabledDefault).describe('If true, the response will be streamed back to the client'),
-                "chunk_size": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeDefault).describe('Minimum number of characters per chunk that post-LLM modules operate on.'),
-                "delimiters": array(schemas_string()).min(1).optional().describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.')
-            }).optional().describe('Options for streaming. Will be ignored if enabled is false.')
-        }).optional()
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+                })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n'))])),
+            "stream": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the response will be streamed back to the client')),
+                "chunk_size": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecStreamChunkSizeDefault).check(/*#__PURE__*/ mini_schemas_describe('Minimum number of characters per chunk that post-LLM modules operate on.')),
+                "delimiters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1))).check(/*#__PURE__*/ mini_schemas_describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.'))
+            })).check(/*#__PURE__*/ mini_schemas_describe('Options for streaming. Will be ignored if enabled is false.'))
+        }))
     }))
+});
+/**
+ * Delete all imperative orchestration configs in the given scenario.
+ */
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsByScenarioParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string()
+});
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsByScenarioHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
+});
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsByScenarioResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "deleted": /*#__PURE__*/ mini_schemas_int()
+});
+/**
+ * Delete all non-current versions (history) for the given orchestration config
+ */
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHistoryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string()
+});
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHistoryHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
+});
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHistoryResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "deleted": /*#__PURE__*/ mini_schemas_int()
 });
 /**
  * List orchestration config history
  */
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryParams = object({
-    "scenario": schemas_string(),
-    "version": schemas_string(),
-    "name": schemas_string()
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryParams = /*#__PURE__*/ schemas_object({
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string()
 });
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryTopMax = 500;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipMin = 0;
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryParams = object({
-    "include_spec": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault).describe('DEPRECATED: Use includeSpec instead'),
-    "includeSpec": schemas_boolean().optional(),
-    "resolve_template_ref": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault).describe('DEPRECATED: Use resolveTemplateRef instead'),
-    "resolveTemplateRef": schemas_boolean().optional(),
-    "$top": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryTopMax).optional().describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).'),
-    "$skip": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipMin).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipDefault).describe('Number of results to skip before returning the page.')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryParams = /*#__PURE__*/ schemas_object({
+    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead')),
+    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
+    "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipMin)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault = `auto`;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault = ``;
@@ -154675,632 +155807,632 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigHist
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamEnabledDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeDefault = 100;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeMax = 10000;
-const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponse = object({
-    "count": schemas_int(),
-    "resources": array(object({
-        "id": schemas_uuid().optional(),
-        "name": schemas_string().optional(),
-        "version": schemas_string().optional(),
-        "scenario": schemas_string().optional(),
-        "creation_timestamp": schemas_string().optional(),
-        "managed_by": schemas_string().optional(),
-        "is_version_head": schemas_boolean().optional(),
-        "resource_group_id": schemas_string().optional(),
-        "spec": object({
-            "modules": union([object({
-                    "prompt_templating": object({
-                        "prompt": union([object({
-                                "template": array(union([object({
-                                        "role": schemas_enum(['system']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text', 'image_url', 'file']),
-                                                "text": schemas_string().optional(),
-                                                "image_url": object({
-                                                    "url": schemas_string(),
-                                                    "detail": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                                }).optional(),
-                                                "file": object({
-                                                    "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                    "filename": schemas_string().optional().describe('Name of the file')
-                                                }).optional(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]),
-                                        "role": schemas_enum(['user'])
-                                    }), object({
-                                        "role": schemas_enum(['assistant']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]).optional(),
-                                        "refusal": schemas_string().optional(),
-                                        "tool_calls": array(object({
-                                            "id": schemas_string().describe('The ID of the tool call.'),
-                                            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                            "function": object({
-                                                "name": schemas_string().describe('The name of the function to call.'),
-                                                "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                            }).describe('The function that the model called.')
-                                        })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                        "reasoning_content": array(object({
-                                            "content": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                            "signature": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                        })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                    }), object({
-                                        "role": schemas_enum(['tool']),
-                                        "tool_call_id": schemas_string(),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "role": schemas_enum(['developer']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                                "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                                "response_format": union([object({
-                                        "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                    }), object({
-                                        "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                    }), object({
-                                        "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                        "json_schema": object({
-                                            "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                            "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                            "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                            "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponse = /*#__PURE__*/ schemas_object({
+    "count": /*#__PURE__*/ mini_schemas_int(),
+    "resources": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+        "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+        "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "creation_timestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "managed_by": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "is_version_head": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+        "resource_group_id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+        "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+            "modules": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                    "prompt_templating": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                                "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                                "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "url": /*#__PURE__*/ mini_schemas_string(),
+                                                    "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                                })),
+                                                "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                    "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                                })),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))]),
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                        "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])),
+                                        "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                        "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                            "function": /*#__PURE__*/ schemas_object({
+                                                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                                "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                        "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                            "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                        "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                                "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                                "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                        "json_schema": /*#__PURE__*/ schemas_object({
+                                            "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                            "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                            "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                         })
-                                    })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                                "tools": array(object({
-                                    "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                    "function": object({
-                                        "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                                "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                    "function": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                     }),
-                                    "cache_control": object({
-                                        "type": schemas_enum(['ephemeral']),
-                                        "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                    }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                            }), object({
-                                "template_ref": union([object({
-                                        "id": schemas_string().describe('ID of the template in prompt registry'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    }), object({
-                                        "scenario": schemas_string().describe('Scenario name'),
-                                        "name": schemas_string().describe('Name of the template'),
-                                        "version": schemas_string().describe('Version of the template'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                            })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                        "model": object({
-                            "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                            "version": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                            "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                            "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                            "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                        }).optional().describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
-                    }).optional().describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n'),
-                    "filtering": object({
-                        "input": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                        }).optional().describe('List of provider type and filters'),
-                        "output": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                            "stream_options": object({
-                                "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                            }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                        }).optional().describe('List of provider type and filters')
-                    }).optional(),
-                    "masking": union([object({
-                            "providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers')
-                        }), object({
-                            "masking_providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                        })]).optional(),
-                    "grounding": object({
-                        "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                        "config": object({
-                            "filters": array(object({
-                                "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                                "search_config": object({
-                                    "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                    "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                                }).optional(),
-                                "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                                "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                                "data_repository_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                                })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                                "document_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                    "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                                })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                                "chunk_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                                })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                            })).optional().describe('Document grounding service filters to be used'),
-                            "placeholders": object({
-                                "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                                "output": schemas_string().describe('Placeholder name for grounding output')
-                            }).describe('Placeholders to be used for grounding input questions and output'),
-                            "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                                    "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                        "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                        "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                            })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                        "model": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                            "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                            "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                            "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
+                    "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                            "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                            })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                    })),
+                    "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                        })])),
+                    "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                                "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                    "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                                })),
+                                "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                                "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                                "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                                "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                    "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                                "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                            "placeholders": /*#__PURE__*/ schemas_object({
+                                "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                                "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                            "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                         })
-                    }).optional(),
-                    "translation": object({
-                        "input": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                            "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "apply_to": array(object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                                "target_language": schemas_string().describe('Language to which the text should be translated.')
-                            }).describe('Configuration for `sap_document_translation` translation provider.')
-                        }).optional().describe('Configuration for input translation'),
-                        "output": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                        "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                        "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                        "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                    }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                    })),
+                    "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                            "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                                "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                        "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                        "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                        "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                             })
-                        }).optional().describe('Configuration for output translation')
-                    }).optional().describe('Configuration for translation module')
-                }).describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n'), array(object({
-                    "prompt_templating": object({
-                        "prompt": union([object({
-                                "template": array(union([object({
-                                        "role": schemas_enum(['system']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text', 'image_url', 'file']),
-                                                "text": schemas_string().optional(),
-                                                "image_url": object({
-                                                    "url": schemas_string(),
-                                                    "detail": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                                }).optional(),
-                                                "file": object({
-                                                    "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                    "filename": schemas_string().optional().describe('Name of the file')
-                                                }).optional(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]),
-                                        "role": schemas_enum(['user'])
-                                    }), object({
-                                        "role": schemas_enum(['assistant']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)]).optional(),
-                                        "refusal": schemas_string().optional(),
-                                        "tool_calls": array(object({
-                                            "id": schemas_string().describe('The ID of the tool call.'),
-                                            "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                            "function": object({
-                                                "name": schemas_string().describe('The name of the function to call.'),
-                                                "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                            }).describe('The function that the model called.')
-                                        })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                        "reasoning_content": array(object({
-                                            "content": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                            "signature": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                        })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                    }), object({
-                                        "role": schemas_enum(['tool']),
-                                        "tool_call_id": schemas_string(),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    }), object({
-                                        "role": schemas_enum(['developer']),
-                                        "content": union([schemas_string(), array(object({
-                                                "type": schemas_enum(['text']),
-                                                "text": schemas_string(),
-                                                "cache_control": object({
-                                                    "type": schemas_enum(['ephemeral']),
-                                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                            })).min(1)])
-                                    })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                                "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                                "response_format": union([object({
-                                        "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                    }), object({
-                                        "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                    }), object({
-                                        "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                        "json_schema": object({
-                                            "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                            "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                            "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                            "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+                }).check(/*#__PURE__*/ mini_schemas_describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n')), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                    "prompt_templating": /*#__PURE__*/ schemas_object({
+                        "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                                "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                                "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "url": /*#__PURE__*/ mini_schemas_string(),
+                                                    "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                                })),
+                                                "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                    "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                                })),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))]),
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                        "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])),
+                                        "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                        "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                            "function": /*#__PURE__*/ schemas_object({
+                                                "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                                "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                        "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                            "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                        }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                        "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                        "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                                "text": /*#__PURE__*/ mini_schemas_string(),
+                                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                            })).check(/*#__PURE__*/ _minLength(1))])
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                                "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                                "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                        "json_schema": /*#__PURE__*/ schemas_object({
+                                            "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                            "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                            "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                         })
-                                    })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                                "tools": array(object({
-                                    "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                    "function": object({
-                                        "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                                "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                    "function": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                     }),
-                                    "cache_control": object({
-                                        "type": schemas_enum(['ephemeral']),
-                                        "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                    }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                            }), object({
-                                "template_ref": union([object({
-                                        "id": schemas_string().describe('ID of the template in prompt registry'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    }), object({
-                                        "scenario": schemas_string().describe('Scenario name'),
-                                        "name": schemas_string().describe('Name of the template'),
-                                        "version": schemas_string().describe('Version of the template'),
-                                        "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                    })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                            })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                        "model": object({
-                            "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                            "version": schemas_string().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                            "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                            "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                            "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                        }).describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
+                                    "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                        "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                        "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                        "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                    })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                            })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                        "model": /*#__PURE__*/ schemas_object({
+                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                            "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                            "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                            "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     }),
-                    "filtering": object({
-                        "input": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                        }).optional().describe('List of provider type and filters'),
-                        "output": object({
-                            "filters": array(union([object({
-                                    "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                        "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                    }).optional().describe('Filter configuration for Azure Content Safety')
-                                }), object({
-                                    "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                    "config": object({
-                                        "violent_crimes": schemas_boolean().optional(),
-                                        "non_violent_crimes": schemas_boolean().optional(),
-                                        "sex_crimes": schemas_boolean().optional(),
-                                        "child_exploitation": schemas_boolean().optional(),
-                                        "defamation": schemas_boolean().optional(),
-                                        "specialized_advice": schemas_boolean().optional(),
-                                        "privacy": schemas_boolean().optional(),
-                                        "intellectual_property": schemas_boolean().optional(),
-                                        "indiscriminate_weapons": schemas_boolean().optional(),
-                                        "hate": schemas_boolean().optional(),
-                                        "self_harm": schemas_boolean().optional(),
-                                        "sexual_content": schemas_boolean().optional(),
-                                        "elections": schemas_boolean().optional(),
-                                        "code_interpreter_abuse": schemas_boolean().optional()
-                                    }).describe('Filter configuration for Llama Guard 3 8B')
-                                })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                            "stream_options": object({
-                                "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                            }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                        }).optional().describe('List of provider type and filters')
-                    }).optional(),
-                    "masking": union([object({
-                            "providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers')
-                        }), object({
-                            "masking_providers": array(object({
-                                "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                                "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                                "entities": array(union([object({
-                                        "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                        "replacement_strategy": union([object({
-                                                "method": schemas_enum(['constant']),
-                                                "value": schemas_string().describe('Value to be used for replacement')
-                                            }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                                "method": schemas_enum(['fabricated_data'])
-                                            }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                    }), object({
-                                        "regex": schemas_string().describe('Regular expression to match the entity'),
-                                        "replacement_strategy": object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                    })])).min(1).describe('List of entities to be masked'),
-                                "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                                "mask_grounding_input": object({
-                                    "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                                }).optional(),
-                                "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                            })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                        })]).optional(),
-                    "grounding": object({
-                        "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                        "config": object({
-                            "filters": array(object({
-                                "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                                "search_config": object({
-                                    "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                    "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                                }).optional(),
-                                "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                                "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                                "data_repository_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                                })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                                "document_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                    "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                                })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                                "chunk_metadata": array(object({
-                                    "key": schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                    "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                                })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                            })).optional().describe('Document grounding service filters to be used'),
-                            "placeholders": object({
-                                "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                                "output": schemas_string().describe('Placeholder name for grounding output')
-                            }).describe('Placeholders to be used for grounding input questions and output'),
-                            "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                    "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                        "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                        "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                            "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                            })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                    })),
+                    "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                                "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                                "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                                "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                                "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                            }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                        "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                    })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                                "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                                "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                                })),
+                                "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                        })])),
+                    "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                                "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                    "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                                })),
+                                "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                                "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                                "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                                "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                    "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                                "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                    "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                                }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                            "placeholders": /*#__PURE__*/ schemas_object({
+                                "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                                "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                            "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                         })
-                    }).optional(),
-                    "translation": object({
-                        "input": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                            "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "apply_to": array(object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                                "target_language": schemas_string().describe('Language to which the text should be translated.')
-                            }).describe('Configuration for `sap_document_translation` translation provider.')
-                        }).optional().describe('Configuration for input translation'),
-                        "output": object({
-                            "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                            "config": object({
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                                "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                        "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                        "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                        "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                    }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                    })),
+                    "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                            "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                                "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                        "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                            "config": /*#__PURE__*/ schemas_object({
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                                "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                        "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                        "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                        "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                             })
-                        }).optional().describe('Configuration for output translation')
-                    }).optional().describe('Configuration for translation module')
-                })).min(1).describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n')]).optional(),
-            "stream": object({
-                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamEnabledDefault).describe('If true, the response will be streamed back to the client'),
-                "chunk_size": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeMax).default(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeDefault).describe('Minimum number of characters per chunk that post-LLM modules operate on.'),
-                "delimiters": array(schemas_string()).min(1).optional().describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.')
-            }).optional().describe('Options for streaming. Will be ignored if enabled is false.')
-        }).optional()
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+                })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n'))])),
+            "stream": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the response will be streamed back to the client')),
+                "chunk_size": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecStreamChunkSizeDefault).check(/*#__PURE__*/ mini_schemas_describe('Minimum number of characters per chunk that post-LLM modules operate on.')),
+                "delimiters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1))).check(/*#__PURE__*/ mini_schemas_describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.'))
+            })).check(/*#__PURE__*/ mini_schemas_describe('Options for streaming. Will be ignored if enabled is false.'))
+        }))
     }))
 });
 /**
  * Get orchestration config by UUID
  */
-const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidParams = object({
-    "orchestrationConfigId": schemas_uuid()
+const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidParams = /*#__PURE__*/ schemas_object({
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
 });
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault = false;
-const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryParams = object({
-    "resolve_template_ref": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault).describe('DEPRECATED: Use resolveTemplateRef instead'),
-    "resolveTemplateRef": schemas_boolean().optional()
+const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryParams = /*#__PURE__*/ schemas_object({
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
 });
-const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault = `auto`;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault = ``;
@@ -155373,654 +156505,654 @@ const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamEnabledDefault = false;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeDefault = 100;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeMax = 10000;
-const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponse = object({
-    "id": schemas_uuid().optional(),
-    "name": schemas_string().optional(),
-    "version": schemas_string().optional(),
-    "scenario": schemas_string().optional(),
-    "creation_timestamp": schemas_string().optional(),
-    "managed_by": schemas_string().optional(),
-    "is_version_head": schemas_boolean().optional(),
-    "resource_group_id": schemas_string().optional(),
-    "spec": object({
-        "modules": union([object({
-                "prompt_templating": object({
-                    "prompt": union([object({
-                            "template": array(union([object({
-                                    "role": schemas_enum(['system']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text', 'image_url', 'file']),
-                                            "text": schemas_string().optional(),
-                                            "image_url": object({
-                                                "url": schemas_string(),
-                                                "detail": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                            }).optional(),
-                                            "file": object({
-                                                "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                "filename": schemas_string().optional().describe('Name of the file')
-                                            }).optional(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]),
-                                    "role": schemas_enum(['user'])
-                                }), object({
-                                    "role": schemas_enum(['assistant']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]).optional(),
-                                    "refusal": schemas_string().optional(),
-                                    "tool_calls": array(object({
-                                        "id": schemas_string().describe('The ID of the tool call.'),
-                                        "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                        "function": object({
-                                            "name": schemas_string().describe('The name of the function to call.'),
-                                            "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                        }).describe('The function that the model called.')
-                                    })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                    "reasoning_content": array(object({
-                                        "content": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                        "signature": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                    })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                }), object({
-                                    "role": schemas_enum(['tool']),
-                                    "tool_call_id": schemas_string(),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "role": schemas_enum(['developer']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                            "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                            "response_format": union([object({
-                                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                }), object({
-                                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                }), object({
-                                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                    "json_schema": object({
-                                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponse = /*#__PURE__*/ schemas_object({
+    "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_uuid()),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "creation_timestamp": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "managed_by": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "is_version_head": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "resource_group_id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+    "spec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+        "modules": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                "prompt_templating": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                            "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                            "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                            })),
+                                            "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                            })),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))]),
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                    "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])),
+                                    "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                    "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                        "function": /*#__PURE__*/ schemas_object({
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                            "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                    "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                        "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                    "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                    "json_schema": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                     })
-                                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                            "tools": array(object({
-                                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                "function": object({
-                                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                    "name": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                    "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                "function": /*#__PURE__*/ schemas_object({
+                                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                 }),
-                                "cache_control": object({
-                                    "type": schemas_enum(['ephemeral']),
-                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                        }), object({
-                            "template_ref": union([object({
-                                    "id": schemas_string().describe('ID of the template in prompt registry'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                }), object({
-                                    "scenario": schemas_string().describe('Scenario name'),
-                                    "name": schemas_string().describe('Name of the template'),
-                                    "version": schemas_string().describe('Version of the template'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                        })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                    "model": object({
-                        "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                        "version": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                        "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                        "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                        "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                    }).optional().describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
-                }).optional().describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n'),
-                "filtering": object({
-                    "input": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                    }).optional().describe('List of provider type and filters'),
-                    "output": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                        "stream_options": object({
-                            "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                        }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                    }).optional().describe('List of provider type and filters')
-                }).optional(),
-                "masking": union([object({
-                        "providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers')
-                    }), object({
-                        "masking_providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                    })]).optional(),
-                "grounding": object({
-                    "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                    "config": object({
-                        "filters": array(object({
-                            "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                            "search_config": object({
-                                "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                            }).optional(),
-                            "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                            "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                            "data_repository_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                            })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                            "document_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                            })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                            "chunk_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                            })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                        })).optional().describe('Document grounding service filters to be used'),
-                        "placeholders": object({
-                            "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                            "output": schemas_string().describe('Placeholder name for grounding output')
-                        }).describe('Placeholders to be used for grounding input questions and output'),
-                        "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                        })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                    "model": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                        "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                        "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                        "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
+                "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                        "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                })),
+                "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                    }), /*#__PURE__*/ schemas_object({
+                        "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                    })])),
+                "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                    "config": /*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                            "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                            })),
+                            "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                            "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                            "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                            "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                            "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                        }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                        "placeholders": /*#__PURE__*/ schemas_object({
+                            "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                            "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                        "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                     })
-                }).optional(),
-                "translation": object({
-                    "input": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                        "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "apply_to": array(object({
-                                "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                            }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                            "target_language": schemas_string().describe('Language to which the text should be translated.')
-                        }).describe('Configuration for `sap_document_translation` translation provider.')
-                    }).optional().describe('Configuration for input translation'),
-                    "output": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                })),
+                "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                        "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                            "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                         })
-                    }).optional().describe('Configuration for output translation')
-                }).optional().describe('Configuration for translation module')
-            }).describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n'), array(object({
-                "prompt_templating": object({
-                    "prompt": union([object({
-                            "template": array(union([object({
-                                    "role": schemas_enum(['system']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text', 'image_url', 'file']),
-                                            "text": schemas_string().optional(),
-                                            "image_url": object({
-                                                "url": schemas_string(),
-                                                "detail": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
-                                            }).optional(),
-                                            "file": object({
-                                                "file_data": schemas_string().describe('Base64 encoded file content or file URL'),
-                                                "filename": schemas_string().optional().describe('Name of the file')
-                                            }).optional(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]),
-                                    "role": schemas_enum(['user'])
-                                }), object({
-                                    "role": schemas_enum(['assistant']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)]).optional(),
-                                    "refusal": schemas_string().optional(),
-                                    "tool_calls": array(object({
-                                        "id": schemas_string().describe('The ID of the tool call.'),
-                                        "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                        "function": object({
-                                            "name": schemas_string().describe('The name of the function to call.'),
-                                            "arguments": schemas_string().describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.')
-                                        }).describe('The function that the model called.')
-                                    })).optional().describe('The tool calls generated by the model, such as function calls.'),
-                                    "reasoning_content": array(object({
-                                        "content": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
-                                        "signature": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
-                                    })).optional().describe('Reasoning or thinking content from the model\'s previous turn.\n')
-                                }), object({
-                                    "role": schemas_enum(['tool']),
-                                    "tool_call_id": schemas_string(),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                }), object({
-                                    "role": schemas_enum(['developer']),
-                                    "content": union([schemas_string(), array(object({
-                                            "type": schemas_enum(['text']),
-                                            "text": schemas_string(),
-                                            "cache_control": object({
-                                                "type": schemas_enum(['ephemeral']),
-                                                "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                            }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                                        })).min(1)])
-                                })])).min(1).describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.'),
-                            "defaults": record(schemas_string(), schemas_string()).optional().describe('Optional default values for the template. If a parameter has no default it is required.'),
-                            "response_format": union([object({
-                                    "type": schemas_enum(['text']).describe('The type of response format being defined: `text`')
-                                }), object({
-                                    "type": schemas_enum(['json_object']).describe('The type of response format being defined: `json_object`')
-                                }), object({
-                                    "type": schemas_enum(['json_schema']).describe('The type of response format being defined: `json_schema`'),
-                                    "json_schema": object({
-                                        "description": schemas_string().optional().describe('A description of what the response format is for, used by the model to determine how to respond in the format.'),
-                                        "name": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax).regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp).describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                        "schema": record(schemas_string(), unknown()).optional().describe('The schema for the response format, described as a JSON Schema object.'),
-                                        "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https:\/\/platform.openai.com\/docs\/guides\/structured-outputs).')
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+            }).check(/*#__PURE__*/ mini_schemas_describe('Partial module configuration for use with config_ref overrides. All fields are optional so that only the modules that should be overridden need to be specified. The remaining configuration is taken from the referenced orchestration config.\n')), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                "prompt_templating": /*#__PURE__*/ schemas_object({
+                    "prompt": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                            "template": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['system']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text', 'image_url', 'file']),
+                                            "text": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                            "image_url": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "url": /*#__PURE__*/ mini_schemas_string(),
+                                                "detail": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemTwoContentTwoItemImageUrlDetailDefault)
+                                            })),
+                                            "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "file_data": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Base64 encoded file content or file URL')),
+                                                "filename": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name of the file'))
+                                            })),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))]),
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['user'])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['assistant']),
+                                    "content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])),
+                                    "refusal": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
+                                    "tool_calls": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The ID of the tool call.')),
+                                        "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                        "function": /*#__PURE__*/ schemas_object({
+                                            "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The name of the function to call.')),
+                                            "arguments": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('The arguments to call the function with, as generated by the model in JSON format. Note that the model does not always generate valid JSON, and may hallucinate parameters not defined by your function schema. Validate the arguments in your code before calling your function.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('The function that the model called.'))
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('The tool calls generated by the model, such as function calls.')),
+                                    "reasoning_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                        "content": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemContentDefault),
+                                        "signature": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneTemplateOneItemThreeReasoningContentItemSignatureDefault)
+                                    }))).check(/*#__PURE__*/ mini_schemas_describe('Reasoning or thinking content from the model\'s previous turn.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['tool']),
+                                    "tool_call_id": /*#__PURE__*/ mini_schemas_string(),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                }), /*#__PURE__*/ schemas_object({
+                                    "role": /*#__PURE__*/ mini_schemas_enum(['developer']),
+                                    "content": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                            "type": /*#__PURE__*/ mini_schemas_enum(['text']),
+                                            "text": /*#__PURE__*/ mini_schemas_string(),
+                                            "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                                "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                                "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                            })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                                        })).check(/*#__PURE__*/ _minLength(1))])
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A chat message array to be formatted with values from placeholder_values. Both role and content can be templated. If messages_history is provided, the templated messages will be appended.')),
+                            "defaults": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Optional default values for the template. If a parameter has no default it is required.')),
+                            "response_format": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['text']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `text`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_object']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_object`'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['json_schema']).check(/*#__PURE__*/ mini_schemas_describe('The type of response format being defined: `json_schema`')),
+                                    "json_schema": /*#__PURE__*/ schemas_object({
+                                        "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the response format is for, used by the model to determine how to respond in the format.')),
+                                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the response format. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                        "schema": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The schema for the response format, described as a JSON Schema object.')),
+                                        "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneResponseFormatThreeJsonSchemaStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the output. If set to true, the model will always follow the exact schema defined in the `schema` field. Only a subset of JSON Schema is supported when `strict` is `true`. To learn more, read the [Structured Outputs guide](https://platform.openai.com/docs/guides/structured-outputs).'))
                                     })
-                                })]).optional().describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n'),
-                            "tools": array(object({
-                                "type": schemas_enum(['function']).describe('The type of the tool. Currently, only `function` is supported.'),
-                                "function": object({
-                                    "description": schemas_string().optional().describe('A description of what the function does, used by the model to choose when and how to call the function.'),
-                                    "name": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax).regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp).describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.'),
-                                    "parameters": record(schemas_string(), unknown()).optional().describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https:\/\/platform.openai.com\/docs\/guides\/function-calling) for examples, and the [JSON Schema reference](https:\/\/json-schema.org\/understanding-json-schema\/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.'),
-                                    "strict": schemas_boolean().nullish().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs\/guides\/function-calling).')
+                                })])).check(/*#__PURE__*/ mini_schemas_describe('Response format that the model output should adhere to. This is the same as the OpenAI definition.\n')),
+                            "tools": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['function']).check(/*#__PURE__*/ mini_schemas_describe('The type of the tool. Currently, only `function` is supported.')),
+                                "function": /*#__PURE__*/ schemas_object({
+                                    "description": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('A description of what the function does, used by the model to choose when and how to call the function.')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameMax)).check(/*#__PURE__*/ _regex(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionNameRegExp)).check(/*#__PURE__*/ mini_schemas_describe('The name of the function to be called. Must be a-z, A-Z, 0-9, or contain underscores and dashes, with a maximum length of 64.')),
+                                    "parameters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('The parameters the functions accepts, described as a JSON Schema object. See the [guide](https://platform.openai.com/docs/guides/function-calling) for examples, and the [JSON Schema reference](https://json-schema.org/understanding-json-schema/) for documentation about the format.  Omitting `parameters` defines a function with an empty parameter list.')),
+                                    "strict": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_nullish(/*#__PURE__*/ mini_schemas_boolean()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptOneToolsItemFunctionStrictDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to enable strict schema adherence when generating the function call. If set to true, the model will follow the exact schema defined in the `parameters` field. Only a subset of JSON Schema is supported when `strict` is `true`. Learn more about Structured Outputs in the [function calling guide](docs/guides/function-calling).'))
                                 }),
-                                "cache_control": object({
-                                    "type": schemas_enum(['ephemeral']),
-                                    "ttl": schemas_enum(['5m', '1h']).optional().describe('Time-to-live for the cache entry. Default is \"5m\" (5 minutes). \"1h\" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n')
-                                }).optional().describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n')
-                            })).optional().describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n')
-                        }), object({
-                            "template_ref": union([object({
-                                    "id": schemas_string().describe('ID of the template in prompt registry'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                }), object({
-                                    "scenario": schemas_string().describe('Scenario name'),
-                                    "name": schemas_string().describe('Name of the template'),
-                                    "version": schemas_string().describe('Version of the template'),
-                                    "scope": schemas_enum(['resource_group', 'tenant']).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n')
-                                })]).describe('Reference to a template in the prompt registry by ID or by scenario, name and version')
-                        })]).optional().describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n'),
-                    "model": object({
-                        "name": schemas_string().describe('Name of the model as in LLM Access configuration'),
-                        "version": schemas_string().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelVersionDefault).describe('Version of the model to be used'),
-                        "params": record(schemas_string(), unknown()).optional().describe('Additional parameters for the model. Default values are used for mandatory parameters.'),
-                        "timeout": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models.'),
-                        "max_retries": schemas_int().min(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')
-                    }).describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n')
+                                "cache_control": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['ephemeral']),
+                                    "ttl": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['5m', '1h'])).check(/*#__PURE__*/ mini_schemas_describe('Time-to-live for the cache entry. Default is "5m" (5 minutes). "1h" (1 hour) is supported on select models (e.g. Claude Opus 4.5, Haiku 4.5, Sonnet 4.5).\n'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Cache control directive for Anthropic prompt caching. Only applicable to Anthropic Claude models. When set, marks the content block as a cache breakpoint.\n'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('A list of tools the model may call. Used to provide a list of functions the model may generate JSON inputs for. This is the same as the OpenAI definition.\n'))
+                        }), /*#__PURE__*/ schemas_object({
+                            "template_ref": /*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "id": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('ID of the template in prompt registry')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefOneScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario name')),
+                                    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the template')),
+                                    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version of the template')),
+                                    "scope": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['resource_group', 'tenant']), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingPromptTwoTemplateRefTwoScopeDefault).check(/*#__PURE__*/ mini_schemas_describe('Defines the scope that is searched for the referenced template.  \'tenant\' indicates the template is shared across all resource groups within the tenant,  while \'resource_group\' indicates the template is only accessible within the specific resource group.\n'))
+                                })]).check(/*#__PURE__*/ mini_schemas_describe('Reference to a template in the prompt registry by ID or by scenario, name and version'))
+                        })])).check(/*#__PURE__*/ mini_schemas_describe('The prompt template to be used. Can be either a user defined template or a reference to a template in the prompt registry. If omitted, messages_history must be provided in the request body.\n')),
+                    "model": /*#__PURE__*/ schemas_object({
+                        "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name of the model as in LLM Access configuration')),
+                        "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
+                        "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
+                        "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                    }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 }),
-                "filtering": object({
-                    "input": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "prompt_shield": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).describe('Filter prompts for harmful content such as jailbreaks and prompt injections.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).')
-                    }).optional().describe('List of provider type and filters'),
-                    "output": object({
-                        "filters": array(union([object({
-                                "type": schemas_enum(['azure_content_safety']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "hate": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "self_harm": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "sexual": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "violence": union([literal(0), literal(2), literal(4), literal(6)]).optional(),
-                                    "protected_material_code": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.')
-                                }).optional().describe('Filter configuration for Azure Content Safety')
-                            }), object({
-                                "type": schemas_enum(['llama_guard_3_8b']).describe('Name of the filter provider type'),
-                                "config": object({
-                                    "violent_crimes": schemas_boolean().optional(),
-                                    "non_violent_crimes": schemas_boolean().optional(),
-                                    "sex_crimes": schemas_boolean().optional(),
-                                    "child_exploitation": schemas_boolean().optional(),
-                                    "defamation": schemas_boolean().optional(),
-                                    "specialized_advice": schemas_boolean().optional(),
-                                    "privacy": schemas_boolean().optional(),
-                                    "intellectual_property": schemas_boolean().optional(),
-                                    "indiscriminate_weapons": schemas_boolean().optional(),
-                                    "hate": schemas_boolean().optional(),
-                                    "self_harm": schemas_boolean().optional(),
-                                    "sexual_content": schemas_boolean().optional(),
-                                    "elections": schemas_boolean().optional(),
-                                    "code_interpreter_abuse": schemas_boolean().optional()
-                                }).describe('Filter configuration for Llama Guard 3 8B')
-                            })])).min(1).describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).'),
-                        "stream_options": object({
-                            "overlap": schemas_int().min(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.')
-                        }).optional().describe('Stream options for output filtering. Will be ignored if stream is false.')
-                    }).optional().describe('List of provider type and filters')
-                }).optional(),
-                "masking": union([object({
-                        "providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers')
-                    }), object({
-                        "masking_providers": array(object({
-                            "type": schemas_enum(['sap_data_privacy_integration']).describe('Type of masking service provider'),
-                            "method": schemas_enum(['anonymization', 'pseudonymization']).describe('Type of masking method to be used'),
-                            "entities": array(union([object({
-                                    "type": schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).describe('Default entities supported by data privacy and integration service'),
-                                    "replacement_strategy": union([object({
-                                            "method": schemas_enum(['constant']),
-                                            "value": schemas_string().describe('Value to be used for replacement')
-                                        }).describe('Replaces the entity with the specified value followed by an incrementing number'), object({
-                                            "method": schemas_enum(['fabricated_data'])
-                                        }).describe('Replaces the entity with a randomly generated value appropriate to its type.')]).optional().describe('Replacement strategy to be used for the entity')
-                                }), object({
-                                    "regex": schemas_string().describe('Regular expression to match the entity'),
-                                    "replacement_strategy": object({
-                                        "method": schemas_enum(['constant']),
-                                        "value": schemas_string().describe('Value to be used for replacement')
-                                    }).describe('Replaces the entity with the specified value followed by an incrementing number').describe('Replacement strategy to be used for the entity')
-                                })])).min(1).describe('List of entities to be masked'),
-                            "allowlist": array(schemas_string()).optional().describe('List of strings that should not be masked'),
-                            "mask_grounding_input": object({
-                                "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module')
-                            }).optional(),
-                            "mask_file_input_method": schemas_enum(['anonymization', 'skip']).optional().describe('Type of masking method to be used for file inputs. Required if file inputs are provided.')
-                        })).min(1).describe('List of masking service providers. \*\*DEPRECATED\*\*:  will be removed March 20, 2027. Use `providers` property instead.')
-                    })]).optional(),
-                "grounding": object({
-                    "type": union([schemas_enum(['document_grounding_service']), unknown()]),
-                    "config": object({
-                        "filters": array(object({
-                            "id": schemas_string().optional().describe('Identifier of this SearchFilter - unique per request.'),
-                            "search_config": object({
-                                "max_chunk_count": schemas_int().gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin).optional().describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.'),
-                                "max_document_count": schemas_int().gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin).optional().describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.')
-                            }).optional(),
-                            "data_repositories": array(schemas_string()).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).describe('Specify [\'\*\'] to search across all DataRepositories or give a specific list of DataRepository ids.'),
-                            "data_repository_type": schemas_enum(['vector', 'help.sap.com']).describe('Only include DataRepositories with the given type.'),
-                            "data_repository_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax))
-                            })).optional().describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'\*\']'),
-                            "document_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax)),
-                                "select_mode": array(schemas_enum(['ignoreIfKeyAbsent'])).optional().describe('Select mode for search filters')
-                            })).optional().describe('Restrict documents considered during search to those annotated with the given metadata.'),
-                            "chunk_metadata": array(object({
-                                "key": schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax),
-                                "value": array(schemas_string().max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax))
-                            })).optional().describe('Restrict chunks considered during search to those with the given metadata.')
-                        })).optional().describe('Document grounding service filters to be used'),
-                        "placeholders": object({
-                            "input": array(schemas_string()).min(1).describe('Contains the input parameters used for grounding input questions'),
-                            "output": schemas_string().describe('Placeholder name for grounding output')
-                        }).describe('Placeholders to be used for grounding input questions and output'),
-                        "metadata_params": array(schemas_string()).optional().describe('Parameter name used for specifying metadata parameters')
+                "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['azure_content_safety']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
+                                    "protected_material_code": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault).check(/*#__PURE__*/ mini_schemas_describe('Detect protected code content from known GitHub repositories. The scan includes software libraries, source code, algorithms, and other proprietary programming content.'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                            }), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "non_violent_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sex_crimes": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "child_exploitation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "defamation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "specialized_advice": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "privacy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "intellectual_property": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "indiscriminate_weapons": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "hate": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "self_harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+                                    "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                        "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                            "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
+                        })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters'))
+                })),
+                "masking": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                        "providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemMaskingOneProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers'))
+                    }), /*#__PURE__*/ schemas_object({
+                        "masking_providers": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "type": /*#__PURE__*/ mini_schemas_enum(['sap_data_privacy_integration']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking service provider')),
+                            "method": /*#__PURE__*/ mini_schemas_enum(['anonymization', 'pseudonymization']).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used')),
+                            "entities": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['profile-person', 'profile-org', 'profile-university', 'profile-location', 'profile-email', 'profile-phone', 'profile-address', 'profile-sapids-internal', 'profile-sapids-public', 'profile-url', 'profile-username-password', 'profile-nationalid', 'profile-iban', 'profile-ssn', 'profile-credit-card-number', 'profile-passport', 'profile-driverlicense', 'profile-nationality', 'profile-religious-group', 'profile-political-group', 'profile-pronouns-gender', 'profile-ethnicity', 'profile-gender', 'profile-sexual-orientation', 'profile-trade-union', 'profile-sensitive-data']).check(/*#__PURE__*/ mini_schemas_describe('Default entities supported by data privacy and integration service')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                            "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')), /*#__PURE__*/ schemas_object({
+                                            "method": /*#__PURE__*/ mini_schemas_enum(['fabricated_data'])
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with a randomly generated value appropriate to its type.'))])).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                }), /*#__PURE__*/ schemas_object({
+                                    "regex": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Regular expression to match the entity')),
+                                    "replacement_strategy": /*#__PURE__*/ schemas_object({
+                                        "method": /*#__PURE__*/ mini_schemas_enum(['constant']),
+                                        "value": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Value to be used for replacement'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Replaces the entity with the specified value followed by an incrementing number')).check(/*#__PURE__*/ mini_schemas_describe('Replacement strategy to be used for the entity'))
+                                })])).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of entities to be masked')),
+                            "allowlist": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('List of strings that should not be masked')),
+                            "mask_grounding_input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemMaskingTwoMaskingProvidersItemOneMaskGroundingInputEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('controls whether the input to the grounding module will be masked with the configuration supplied in the masking module'))
+                            })),
+                            "mask_file_input_method": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_enum(['anonymization', 'skip'])).check(/*#__PURE__*/ mini_schemas_describe('Type of masking method to be used for file inputs. Required if file inputs are provided.'))
+                        })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('List of masking service providers. **DEPRECATED**:  will be removed March 20, 2027. Use `providers` property instead.'))
+                    })])),
+                "grounding": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "type": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_enum(['document_grounding_service']), /*#__PURE__*/ schemas_unknown()]),
+                    "config": /*#__PURE__*/ schemas_object({
+                        "filters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                            "id": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Identifier of this SearchFilter - unique per request.')),
+                            "search_config": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                                "max_chunk_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxChunkCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of chunks to be returned. Cannot be used with \'maxDocumentCount\'.')),
+                                "max_document_count": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gt(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneSearchConfigMaxDocumentCountExclusiveMin))).check(/*#__PURE__*/ mini_schemas_describe('[Only supports \'vector\' dataRepositoryType] - Maximum number of documents to be returned. Cannot be used with \'maxChunkCount\'. If maxDocumentCount is given, then only one chunk per document is returned.'))
+                            })),
+                            "data_repositories": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Specify [\'*\'] to search across all DataRepositories or give a specific list of DataRepository ids.')),
+                            "data_repository_type": /*#__PURE__*/ mini_schemas_enum(['vector', 'help.sap.com']).check(/*#__PURE__*/ mini_schemas_describe('Only include DataRepositories with the given type.')),
+                            "data_repository_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDataRepositoryMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict DataRepositories considered during search to those annotated with the given metadata. Useful when combined with dataRepositories=[\'*\']')),
+                            "document_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneDocumentMetadataItemValueItemMax))),
+                                "select_mode": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_enum(['ignoreIfKeyAbsent']))).check(/*#__PURE__*/ mini_schemas_describe('Select mode for search filters'))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict documents considered during search to those annotated with the given metadata.')),
+                            "chunk_metadata": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "key": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemKeyMax)),
+                                "value": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ _maxLength(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemGroundingConfigFiltersItemOneChunkMetadataItemValueItemMax)))
+                            }))).check(/*#__PURE__*/ mini_schemas_describe('Restrict chunks considered during search to those with the given metadata.'))
+                        }))).check(/*#__PURE__*/ mini_schemas_describe('Document grounding service filters to be used')),
+                        "placeholders": /*#__PURE__*/ schemas_object({
+                            "input": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Contains the input parameters used for grounding input questions')),
+                            "output": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Placeholder name for grounding output'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Placeholders to be used for grounding input questions and output')),
+                        "metadata_params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string())).check(/*#__PURE__*/ mini_schemas_describe('Parameter name used for specifying metadata parameters'))
                     })
-                }).optional(),
-                "translation": object({
-                    "input": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Type of document translation provider'),
-                        "translate_messages_history": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).describe('If true, the messages history will be translated as well.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "apply_to": array(object({
-                                "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                            }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')).min(1).optional(),
-                            "target_language": schemas_string().describe('Language to which the text should be translated.')
-                        }).describe('Configuration for `sap_document_translation` translation provider.')
-                    }).optional().describe('Configuration for input translation'),
-                    "output": object({
-                        "type": schemas_enum(['sap_document_translation']).describe('Configuration for `sap_document_translation` translation provider.'),
-                        "config": object({
-                            "source_language": schemas_string().optional().describe('Language of the text to be translated.'),
-                            "target_language": union([schemas_string().describe('Language to which the text should be translated.'), object({
-                                    "category": schemas_enum(['placeholders', 'template_roles']).describe('Category to apply translation to.'),
-                                    "items": array(schemas_string()).describe('List of placeholders or roles to apply translation to'),
-                                    "source_language": schemas_string().optional().describe('Language of the text to be translated.')
-                                }).describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{\"category\": \"placeholders\", \"items\": [\"user_input\"], \"source_language\": \"de-DE\"}` targets the value of \"user_input\" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n')])
+                })),
+                "translation": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                    "input": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Type of document translation provider')),
+                        "translate_messages_history": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemTranslationInputOneTranslateMessagesHistoryDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the messages history will be translated as well.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "apply_to": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_object({
+                                "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))).check(/*#__PURE__*/ _minLength(1))),
+                            "target_language": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.'))
+                        }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.'))
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for input translation')),
+                    "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+                        "type": /*#__PURE__*/ mini_schemas_enum(['sap_document_translation']).check(/*#__PURE__*/ mini_schemas_describe('Configuration for `sap_document_translation` translation provider.')),
+                        "config": /*#__PURE__*/ schemas_object({
+                            "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.')),
+                            "target_language": /*#__PURE__*/ schemas_union([/*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Language to which the text should be translated.')), /*#__PURE__*/ schemas_object({
+                                    "category": /*#__PURE__*/ mini_schemas_enum(['placeholders', 'template_roles']).check(/*#__PURE__*/ mini_schemas_describe('Category to apply translation to.')),
+                                    "items": /*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('List of placeholders or roles to apply translation to')),
+                                    "source_language": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Language of the text to be translated.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('This selector allows you to define the scope of translation, such as specific placeholders or messages with specific roles. For example, `{"category": "placeholders", "items": ["user_input"], "source_language": "de-DE"}` targets the value of "user_input" in `placeholder_values` specified in the request payload; and considers the value to be in German.\n'))])
                         })
-                    }).optional().describe('Configuration for output translation')
-                }).optional().describe('Configuration for translation module')
-            })).min(1).describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n')]).optional(),
-        "stream": object({
-            "enabled": schemas_boolean().default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamEnabledDefault).describe('If true, the response will be streamed back to the client'),
-            "chunk_size": schemas_int().min(1).max(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeMax).default(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeDefault).describe('Minimum number of characters per chunk that post-LLM modules operate on.'),
-            "delimiters": array(schemas_string()).min(1).optional().describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.')
-        }).optional().describe('Options for streaming. Will be ignored if enabled is false.')
-    }).optional()
+                    })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for output translation'))
+                })).check(/*#__PURE__*/ mini_schemas_describe('Configuration for translation module'))
+            })).check(/*#__PURE__*/ _minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('A list of module configurations. The first configuration in the list that succeeds will be used.\n'))])),
+        "stream": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
+            "enabled": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamEnabledDefault).check(/*#__PURE__*/ mini_schemas_describe('If true, the response will be streamed back to the client')),
+            "chunk_size": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ _gte(1)).check(/*#__PURE__*/ _lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecStreamChunkSizeDefault).check(/*#__PURE__*/ mini_schemas_describe('Minimum number of characters per chunk that post-LLM modules operate on.')),
+            "delimiters": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_array(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ _minLength(1))).check(/*#__PURE__*/ mini_schemas_describe('List of delimiters to split the input text into chunks.Please note, this is a required parameter when `input_translation_module_config` or `output_translation_module_config` are configured.'))
+        })).check(/*#__PURE__*/ mini_schemas_describe('Options for streaming. Will be ignored if enabled is false.'))
+    }))
 });
 /**
  * Delete orchestration config
  */
-const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigParams = object({
-    "orchestrationConfigId": schemas_uuid()
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigParams = /*#__PURE__*/ schemas_object({
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
 });
-const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
-const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigResponse = object({
-    "message": schemas_string()
+const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * Import orchestration config
  */
-const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
-const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigBody = object({
-    "file": _instanceof(File).optional()
+const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigBody = /*#__PURE__*/ schemas_object({
+    "file": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_instanceof(Blob))
 });
-const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigResponse = object({
-    "message": schemas_string(),
-    "id": schemas_uuid(),
-    "scenario": schemas_string(),
-    "name": schemas_string(),
-    "version": schemas_string()
+const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigResponse = /*#__PURE__*/ schemas_object({
+    "message": /*#__PURE__*/ mini_schemas_string(),
+    "id": /*#__PURE__*/ mini_schemas_uuid(),
+    "scenario": /*#__PURE__*/ mini_schemas_string(),
+    "name": /*#__PURE__*/ mini_schemas_string(),
+    "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
  * Export orchestration config
  */
-const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigParams = object({
-    "orchestrationConfigId": schemas_uuid()
+const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigParams = /*#__PURE__*/ schemas_object({
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
 });
-const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigHeader = object({
-    "AI-Resource-Group": schemas_string().optional().describe('Specify a resource group id to use')
+const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
+    "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
 });
-const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigResponse = unknown();
+const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigResponse = /*#__PURE__*/ (/* unused pure expression or super */ null && (zod.unknown()));
 //# sourceMappingURL=prompt-registry.zod.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/prompt-registry/dist/zod/index.js
 
@@ -156294,7 +157426,7 @@ class OrchestrationClient {
         }
         const response = await http_client_executeRequest({
             url: `/inference/deployments/${deploymentId}/v2/completion`,
-            ...(this.deploymentConfig ?? {})
+            ...this.deploymentConfig
         }, body, requestConfig, this.destination);
         // Log summary when fallbacks were used
         if (response.data?.intermediate_failures) {
@@ -156330,7 +157462,9 @@ class OrchestrationClient {
             JSON.parse(config);
         }
         catch (error) {
-            throw new Error(`Could not parse JSON: ${error}`, { cause: error });
+            throw new Error(`Could not parse JSON: ${String(error)}`, {
+                cause: error
+            });
         }
     }
     /**
@@ -156349,7 +157483,7 @@ class OrchestrationClient {
             parsedObject = dist.parse(config.promptTemplating.prompt);
         }
         catch (error) {
-            throw new Error(`Error parsing YAML: ${error}`, { cause: error });
+            throw new Error(`Error parsing YAML: ${String(error)}`, { cause: error });
         }
         const result = RegistryControllerPromptControllerCreateUpdatePromptTemplateBody.safeParse(parsedObject);
         if (!result.success) {
@@ -156442,7 +157576,7 @@ class OrchestrationEmbeddingClient {
         }
         return executeRequest({
             url: `/inference/deployments/${deploymentId}/v2/embeddings`,
-            ...(this.deploymentConfig ?? {})
+            ...this.deploymentConfig
         }, body, requestConfig, this.destination);
     }
 }
