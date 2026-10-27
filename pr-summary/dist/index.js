@@ -39922,7 +39922,10 @@ function _fromDer(bytes, remaining, depth, options) {
         var subOptions = {
           // enforce strict mode to avoid parsing ASN.1 from plain data
           strict: true,
-          decodeBitStrings: true
+          // only decode one level of BIT STRINGs, nested decoding has
+          // quadratic cost due to copies for change detection
+          decodeBitStrings: false,
+          maxDepth: options.maxDepth
         };
         var composed = _fromDer(bytes, remaining, depth + 1, subOptions);
         var used = start - bytes.length();
@@ -40100,17 +40103,25 @@ asn1.oidToDer = function(oid) {
   var values = oid.split('.');
   var bytes = forge.util.createBuffer();
 
-  // first byte is 40 * value1 + value2
-  bytes.putByte(40 * parseInt(values[0], 10) + parseInt(values[1], 10));
-  // other bytes are each value in base 128 with 8th bit set except for
-  // the last byte for each value
+  // X.660: the first arc is 0, 1 or 2, and the second arc is at most 39
+  // under 0 and 1; other values would encode the same as a different OID
+  var first = parseInt(values[0], 10);
+  var second = parseInt(values[1], 10);
+  if(!(first >= 0 && first <= 2 && second >= 0) ||
+    (first < 2 && second > 39)) {
+    throw new Error('Invalid OID; the first two arcs are out of range.');
+  }
+
+  // the first subidentifier is 40 * value1 + value2; the remaining
+  // subidentifiers are each a single value. every subidentifier is encoded in
+  // base 128 with the 8th bit set on every byte except its last.
   var last, valueBytes, value, b;
-  for(var i = 2; i < values.length; ++i) {
+  for(var i = 1; i < values.length; ++i) {
     // produce value bytes in reverse because we don't know how many
     // bytes it will take to store the value
     last = true;
     valueBytes = [];
-    value = parseInt(values[i], 10);
+    value = (i === 1) ? 40 * first + second : parseInt(values[i], 10);
     // TODO: Change bitwise logic to allow larger values.
     if(value > 0xffffffff) {
       throw new Error('OID value too large; max is 32-bits.');
@@ -40152,13 +40163,12 @@ asn1.derToOid = function(bytes) {
     bytes = forge.util.createBuffer(bytes);
   }
 
-  // first byte is 40 * value1 + value2
-  var b = bytes.getByte();
-  oid = Math.floor(b / 40) + '.' + (b % 40);
-
-  // other bytes are each value in base 128 with 8th bit set except for
-  // the last byte for each value
+  // each subidentifier is encoded in base 128 with the 8th bit set on every
+  // byte except its last; the first subidentifier encodes the first two arcs
+  // as 40 * value1 + value2.
+  var b;
   var value = 0;
+  var first = true;
   while(bytes.length() > 0) {
     // error if 7b shift would exceed Number.MAX_SAFE_INTEGER
     // (Number.MAX_SAFE_INTEGER / 128)
@@ -40172,7 +40182,16 @@ asn1.derToOid = function(bytes) {
       value += b & 0x7F;
     } else {
       // last byte
-      oid += '.' + (value + b);
+      value += b;
+      if(first) {
+        // split the first subidentifier into the first two arcs
+        oid = (value < 80) ?
+          Math.floor(value / 40) + '.' + (value % 40) :
+          '2.' + (value - 80);
+        first = false;
+      } else {
+        oid += '.' + value;
+      }
       value = 0;
     }
   }
@@ -41165,7 +41184,7 @@ var BlockCipher = forge.cipher.BlockCipher = function(options) {
  *          additionalData additional authentication data as a binary-encoded
  *            string of bytes, for 'GCM' mode, (default: none).
  *          tagLength desired length of authentication tag, in bits, for
- *            'GCM' mode (0-128, default: 128).
+ *            'GCM' mode (128, 120, 112, 104, 96, 64 or 32, default: 128).
  *          tag the authentication tag to check if decrypting, as a
  *             binary-encoded string of bytes.
  *          output the output the buffer to write to, null to create one.
@@ -41344,11 +41363,23 @@ modes.ecb.prototype.unpad = function(output, options) {
     return false;
   }
 
-  // ensure padding byte count is valid
+  // nothing to unpad, e.g. the caller already read all output
   var len = output.length();
+  if(len === 0) {
+    return true;
+  }
+
+  // ensure padding byte count is valid
   var count = output.at(len - 1);
-  if(count > (this.blockSize << 2)) {
+  if(count === 0 || count > this.blockSize || count > len) {
     return false;
+  }
+
+  // ensure all padding bytes match the padding count (RFC 5652 6.3)
+  for(var i = 2; i <= count; ++i) {
+    if(output.at(len - i) !== count) {
+      return false;
+    }
   }
 
   // trim off padding bytes
@@ -41445,11 +41476,23 @@ modes.cbc.prototype.unpad = function(output, options) {
     return false;
   }
 
-  // ensure padding byte count is valid
+  // nothing to unpad, e.g. the caller already read all output
   var len = output.length();
+  if(len === 0) {
+    return true;
+  }
+
+  // ensure padding byte count is valid
   var count = output.at(len - 1);
-  if(count > (this.blockSize << 2)) {
+  if(count === 0 || count > this.blockSize || count > len) {
     return false;
+  }
+
+  // ensure all padding bytes match the padding count (RFC 5652 6.3)
+  for(var i = 2; i <= count; ++i) {
+    if(output.at(len - i) !== count) {
+      return false;
+    }
   }
 
   // trim off padding bytes
@@ -41806,10 +41849,14 @@ modes.gcm.prototype.start = function(options) {
   }
 
   // default tag length is 128 bits
-  if('tagLength' in options) {
-    this._tagLength = options.tagLength;
+  if(options.tagLength !== undefined && options.tagLength !== null) {
+    this._tagLength = Number(options.tagLength);
   } else {
     this._tagLength = 128;
+  }
+  // NIST SP-800-38D 5.2.1.2
+  if([128, 120, 112, 104, 96, 64, 32].indexOf(this._tagLength) === -1) {
+    throw new Error('Invalid tag length.');
   }
 
   // if tag is given, ensure tag matches tag length
@@ -45205,8 +45252,8 @@ function bnpModInt(n) {
 // (public) 1/this % m (HAC 14.61)
 function bnModInverse(m) {
   // FORGE: jsbn fix
-  // avoid infinite loop
-  if(this.signum() == 0) {
+  // avoid infinite loop with zero or negative inputs
+  if(this.signum() <= 0 || m.signum() <= 0) {
     // returning zero to align with similar behavior when no multiplicative
     // inverse module m is found.
     return BigInteger.ZERO;
@@ -47130,6 +47177,12 @@ pki.decryptRsaPrivateKey = function(pem, password) {
 pki.pbe.generatePkcs12Key = function(password, salt, id, iter, n, md) {
   var j, l;
 
+  // RFC 7292 B.2: with fewer than 1 iteration no hashing is done and the
+  // derived key would be a constant that does not depend on the password
+  if(!(iter >= 1)) {
+    throw new Error('PKCS#12 key derivation iteration count must be >= 1.');
+  }
+
   if(typeof md === 'undefined' || md === null) {
     if(!('sha1' in forge.md)) {
       throw new Error('"sha1" hash algorithm unavailable.');
@@ -47831,13 +47884,18 @@ pem.encode = function(msg, options) {
 pem.decode = function(str) {
   var rval = [];
 
+  // convert non-strings like a Buffer as the previous regex search did
+  str = String(str);
+
   // split string into PEM messages (be lenient w/EOF on BEGIN line)
-  var rMessage = /\s*-----BEGIN ([A-Z0-9- ]+)-----\r?\n?([\x21-\x7e\s]+?(?:\r?\n\r?\n))?([:A-Za-z0-9+\/=\s]+?)-----END \1-----/g;
-  var rHeader = /([\x21-\x7e]+):\s*([\x21-\x7e\s^:]+)/;
+  var messages = _pemMessageScanner(str);
+  // the name must start at the beginning of a run of printable chars, which
+  // gives the same match as an unanchored search without quadratic retries
+  var rHeader = /(?:^|[^\x21-\x7e])([\x21-\x7e]+):\s*([\x21-\x7e\s^:]+)/;
   var rCRLF = /\r?\n/;
   var match;
   while(true) {
-    match = rMessage.exec(str);
+    match = messages.next();
     if(!match) {
       break;
     }
@@ -47869,7 +47927,7 @@ pem.decode = function(str) {
     var li = 0;
     while(match && li < lines.length) {
       // get line, trim any rhs whitespace
-      var line = lines[li].replace(/\s+$/, '');
+      var line = rtrim(lines[li]);
 
       // RFC2822 unfold any following folded lines
       for(var nl = li + 1; nl < lines.length; ++nl) {
@@ -47970,6 +48028,177 @@ function foldHeader(header) {
 
 function ltrim(str) {
   return str.replace(/^\s+/, '');
+}
+
+// a loop, since /\s+$/ is quadratic on whitespace followed by non-whitespace
+function rtrim(str) {
+  var end = str.length;
+  while(end > 0 && /\s/.test(str.charAt(end - 1))) {
+    --end;
+  }
+  return str.substring(0, end);
+}
+
+/**
+ * Creates a scanner for the PEM messages in a string. It finds the same
+ * matches as this regular expression, except that only the shortest label
+ * followed by '-----' is tried (RFC 7468 labels can't contain '--'):
+ *
+ * /\s*-----BEGIN ([A-Z0-9- ]+)-----\r?\n?([\x21-\x7e\s]+?(?:\r?\n\r?\n))?
+ *   ([:A-Za-z0-9+\/=\s]+?)-----END \1-----/g
+ *
+ * The regular expression takes polynomial time on input without a matching
+ * END line. The scanner indexes the END lines once instead, so each BEGIN
+ * line is matched without rescanning the input.
+ *
+ * @param str the string to scan.
+ *
+ * @return an object whose next() returns the next match as
+ *   [match, label, headers, body] (headers may be undefined), or null.
+ */
+function _pemMessageScanner(str) {
+  var rBody = /[:A-Za-z0-9+\/=\s]/;
+  var rNotBody = /[^:A-Za-z0-9+\/=\s]/g;
+  var rNotHeader = /[^\x21-\x7e\s]/g;
+  var rLabel = /[A-Z0-9- ]/;
+
+  // index of the first char at or after i matched by a global regex
+  function indexOfRegex(regex, i) {
+    regex.lastIndex = i;
+    var match = regex.exec(str);
+    return match ? match.index : str.length;
+  }
+
+  // shortest label at i followed by '-----', or null
+  function labelAt(i) {
+    for(var j = i; j < str.length && rLabel.test(str.charAt(j)); ++j) {
+      if(j > i && str.substr(j, 5) === '-----') {
+        return str.substring(i, j);
+      }
+    }
+    return null;
+  }
+
+  // end of a blank line (\r?\n\r?\n) starting at i, or -1
+  function blankLineEnd(i) {
+    if(str.charAt(i) === '\r') {
+      ++i;
+    }
+    if(str.charAt(i) !== '\n') {
+      return -1;
+    }
+    if(str.charAt(++i) === '\r') {
+      ++i;
+    }
+    return str.charAt(i) === '\n' ? i + 1 : -1;
+  }
+
+  // first i in [start, end) where a blank line ends before end, or -1
+  function firstBlankLine(start, end) {
+    for(var i = start; i < end; ++i) {
+      var v = blankLineEnd(i);
+      if(v !== -1 && v < end) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  // the headers group ends at a blank line inside the run of body chars
+  // before an END line; index END lines by label, with the first such
+  // blank line
+  var ends = {};
+  for(var end = str.indexOf('-----END '); end !== -1;
+    end = str.indexOf('-----END ', end + 1)) {
+    var endLabel = labelAt(end + 9);
+    var start = end;
+    while(start > 0 && rBody.test(str.charAt(start - 1))) {
+      --start;
+    }
+    var blank = firstBlankLine(start, end);
+    if(endLabel !== null && blank !== -1) {
+      var key = '$' + endLabel;
+      (ends[key] = ends[key] || []).push({end: end, blank: blank});
+    }
+  }
+
+  var pos = 0;
+  var headerEnd = -1;
+  return {
+    next: function() {
+      var begin;
+      while((begin = str.indexOf('-----BEGIN ', pos)) !== -1) {
+        pos = begin + 1;
+        var label = labelAt(begin + 11);
+        if(label === null) {
+          continue;
+        }
+        var q = begin + 16 + label.length;
+
+        // the body is the run of body chars that ends at a matching END line
+        var bodyEnd = indexOfRegex(rNotBody, q);
+        var bodyEndOk = str.substr(bodyEnd, 9) === '-----END ' &&
+          labelAt(bodyEnd + 9) === label;
+        // headers chars end here (q never decreases between BEGIN lines)
+        if(q > headerEnd) {
+          headerEnd = indexOfRegex(rNotHeader, q);
+        }
+        // first later matching END line with a blank line before it
+        var later = null;
+        var list = ends['$' + label];
+        if(list) {
+          var lo = 0;
+          var hi = list.length;
+          while(lo < hi) {
+            var mid = (lo + hi) >> 1;
+            if(list[mid].end > bodyEnd) {
+              hi = mid;
+            } else {
+              lo = mid + 1;
+            }
+          }
+          later = list[lo] || null;
+        }
+
+        // \r?\n? tries to consume as much as possible first
+        var starts = [];
+        if(str.charAt(q) === '\r') {
+          if(str.charAt(q + 1) === '\n') {
+            starts.push(q + 2);
+          }
+          starts.push(q + 1);
+        } else if(str.charAt(q) === '\n') {
+          starts.push(q + 1);
+        }
+        starts.push(q);
+
+        for(var i = 0; i < starts.length; ++i) {
+          var t = starts[i];
+          // optional headers: up to the first blank line that a non-empty
+          // body and the END line follow
+          var blank = bodyEndOk ? firstBlankLine(t + 1, bodyEnd) : -1;
+          var end = bodyEnd;
+          if(blank === -1 && later) {
+            blank = later.blank;
+            end = later.end;
+          }
+          if(blank !== -1 && blank <= headerEnd) {
+            var v = blankLineEnd(blank);
+            pos = end + 14 + label.length;
+            return [str.substring(begin, pos), label,
+              str.substring(t, v), str.substring(v, end)];
+          }
+          // no headers
+          if(bodyEndOk && t < bodyEnd) {
+            pos = bodyEnd + 14 + label.length;
+            return [str.substring(begin, pos), label,
+              undefined, str.substring(t, bodyEnd)];
+          }
+        }
+      }
+      return null;
+    }
+  };
 }
 
 
@@ -48729,6 +48958,9 @@ p12.pkcs12FromAsn1 = function(obj, strict, password) {
     var macSalt = new forge.util.ByteBuffer(capture.macSalt);
     var macIterations = (('macIterations' in capture) ?
       parseInt(forge.util.bytesToHex(capture.macIterations), 16) : 1);
+    if(!(macIterations >= 1)) {
+      throw new Error('PKCS#12 MAC iteration count must be >= 1.');
+    }
     var macKey = p12.generateKey(
       password, macSalt, 3, macIterations, macKeyBytes, md);
     var mac = forge.hmac.create();
@@ -53036,6 +53268,35 @@ var digestInfoValidator = {
 };
 
 /**
+ * DER encode a DigestInfo from a digest algorithm OID and digest.
+ *
+ * Used by RSASSA-PKCS1-v1_5 verification to require a canonical DigestInfo
+ * encoding (RFC 8017 8.2.2).
+ *
+ * @param oid the digest algorithm OID as a dotted string.
+ * @param digest the digest as a binary-encoded string.
+ * @param withParameters true to include empty NULL parameters.
+ *
+ * @return the DER-encoded DigestInfo as a binary-encoded string.
+ */
+var _encodeDigestInfo = function(oid, digest, withParameters) {
+  var digestAlgorithm = [asn1.create(
+    asn1.Class.UNIVERSAL, asn1.Type.OID, false,
+    asn1.oidToDer(oid).getBytes())];
+  if(withParameters) {
+    digestAlgorithm.push(asn1.create(
+      asn1.Class.UNIVERSAL, asn1.Type.NULL, false, ''));
+  }
+  return asn1.toDer(asn1.create(
+    asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+      asn1.create(
+        asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, digestAlgorithm),
+      asn1.create(
+        asn1.Class.UNIVERSAL, asn1.Type.OCTETSTRING, false, digest)
+    ])).getBytes();
+};
+
+/**
  * Wrap digest in DigestInfo object.
  *
  * This function implements EMSA-PKCS1-v1_5-ENCODE as per RFC 3447.
@@ -53940,6 +54201,23 @@ pki.setRsaPublicKey = pki.rsa.setPublicKey = function(n, e) {
                 'DigestInfo value. ' +
                 'Missing algorithm identifier NULL parameters.');
             }
+          }
+
+          // require a canonical DER DigestInfo (RFC 8017 8.2.2). The BER
+          // parser and validator above tolerate extra elements, NULL
+          // parameters with content, non-minimal lengths, and non-canonical
+          // OIDs, all of which leave room for low exponent signature forgery.
+          // Re-encode with and without NULL parameters and compare bytes.
+          // A prefix comparison keeps the _parseAllDigestBytes testing flag
+          // behavior; by default trailing bytes were already rejected above.
+          var withParameters = _encodeDigestInfo(oid, capture.digest, true);
+          var withoutParameters =
+            _encodeDigestInfo(oid, capture.digest, false);
+          if(d.substring(0, withParameters.length) !== withParameters &&
+            d.substring(0, withoutParameters.length) !== withoutParameters) {
+            throw new Error(
+              'ASN.1 object does not contain a valid RSASSA-PKCS1-v1_5 ' +
+              'DigestInfo value.');
           }
 
           // compare the given digest to the decrypted one
@@ -57792,7 +58070,7 @@ tls.handleServerHelloDone = function(c, record, length) {
     });
   }
 
-  if(c.serverCertificate === null) {
+  if(c.session.serverCertificate === null) {
     // no server certificate was provided
     var error = {
       message: 'No server certificate provided. Not enough security.',
@@ -57822,10 +58100,11 @@ tls.handleServerHelloDone = function(c, record, length) {
           error.alert.description = ret;
         }
       }
-
-      // send error
-      return c.error(c, error);
     }
+
+    // send error even if accepted, the RSA key exchange needs the server
+    // certificate
+    return c.error(c, error);
   }
 
   // create client certificate message if requested
@@ -58277,8 +58556,9 @@ tls.handleHeartbeat = function(c, record) {
   var payload = b.getBytes(length);
 
   if(type === tls.HeartbeatMessageType.heartbeat_request) {
-    // discard request during handshake or if length is too large
-    if(c.handshaking || length > payload.length) {
+    // discard request before the first handshake is complete, during
+    // handshake, or if length is too large
+    if(c.handshakes === 0 || c.handshaking || length > payload.length) {
       // continue
       return c.process();
     }
@@ -60097,6 +60377,8 @@ tls.createConnection = function(options) {
                   tls.Alert.Description.unexpected_message
               }
             });
+            // fatal error closed and reset the connection (no record)
+            return rval;
           }
         }
 
@@ -60198,22 +60480,22 @@ tls.createConnection = function(options) {
     }
   };
 
-  /**
-   * Called when TLS protocol data has been received from somewhere and should
-   * be processed by the TLS engine.
-   *
-   * @param data the TLS protocol data, as a string, to process.
-   *
-   * @return 0 if the data could be processed, otherwise the number of bytes
-   *         required for data to be processed.
-   */
-  c.process = function(data) {
-    var rval = 0;
+  // true while c.process() is handling records
+  var _processing = false;
+  // true when c.process() was called again while handling a record
+  var _processNext = false;
 
-    // buffer input data
-    if(data) {
-      c.input.putBytes(data);
-    }
+  /**
+   * Reads the next record and, once it is complete, passes it to its
+   * handler. Handlers call c.process() to continue with the next record.
+   *
+   * @param c the TLS connection.
+   *
+   * @return 0 if the input data could be processed, otherwise the
+   *         number of bytes required for data to be processed.
+   */
+  var _processRecord = function(c) {
+    var rval = 0;
 
     // process next record if no failure, process will be called after
     // each record is handled (since handling can be asynchronous)
@@ -60238,6 +60520,54 @@ tls.createConnection = function(options) {
       if(!c.fail && c.record !== null && c.record.ready) {
         _update(c, c.record);
       }
+    }
+
+    return rval;
+  };
+
+  /**
+   * Called when TLS protocol data has been received from somewhere and should
+   * be processed by the TLS engine.
+   *
+   * @param data the TLS protocol data, as a string, to process.
+   *
+   * @return 0 if the data could be processed, otherwise the number of bytes
+   *         required for data to be processed.
+   */
+  c.process = function(data) {
+    var rval = 0;
+
+    // buffer input data
+    if(data) {
+      c.input.putBytes(data);
+    }
+
+    // record handlers call c.process() without data to continue with the
+    // next record; while records are being processed, only flag that the
+    // loop below should continue instead of recursing, which could exhaust
+    // the call stack
+    if(_processing && typeof(data) === 'undefined') {
+      _processNext = true;
+      return rval;
+    }
+
+    // new data is processed right away, as before, even in a nested call
+    // (e.g., from a tlsDataReady handler that passes data synchronously
+    // between two connections)
+    var processing = _processing;
+    var processNext = _processNext;
+    _processing = true;
+    _processNext = false;
+    try {
+      // return value is based on the first record, as before
+      rval = _processRecord(c);
+      while(_processNext) {
+        _processNext = false;
+        _processRecord(c);
+      }
+    } finally {
+      _processing = processing;
+      _processNext = processNext;
     }
 
     return rval;
@@ -63855,12 +64185,14 @@ var _createSignatureDigest = function(options) {
  *
  * @param options:
  *   certificate the certificate or CSR to verify.
+ *   publicKey the optional public key to verify with.
  *   md the signature digest.
  *   signature the signature
  * @return a created md instance. throws if unknown oid.
  */
 var _verifySignature = function(options) {
   var cert = options.certificate;
+  var publicKey = options.publicKey || cert.publicKey;
   var scheme;
 
   switch(cert.signatureOid) {
@@ -63907,7 +64239,7 @@ var _verifySignature = function(options) {
   }
 
   // verify signature on cert using public key
-  return cert.publicKey.verify(
+  return publicKey.verify(
     options.md.digest().getBytes(), options.signature, scheme
   );
 };
@@ -64312,8 +64644,12 @@ pki.createCertificate = function() {
     }
 
     if(md !== null) {
+      // the padding scheme comes from the child's signature algorithm
       rval = _verifySignature({
-        certificate: cert, md: md, signature: child.signature
+        certificate: child,
+        publicKey: cert.publicKey,
+        md: md,
+        signature: child.signature
       });
     }
 
@@ -66204,10 +66540,9 @@ pki.verifyCertificateChain = function(caStore, chain, options) {
         // where an old intermediate certificate seems to have a matching parent
         // but none of the parents actually verify ... but the intermediate
         // is in the CA and it should pass this check; needs investigation
-        var parents = parent;
-        if(!forge.util.isArray(parents)) {
-          parents = [parents];
-        }
+        // copy the CA store's array so that shift() below does not remove
+        // certificates from the store
+        var parents = forge.util.isArray(parent) ? parent.slice() : [parent];
 
         // try to verify with each possible parent (typically only one)
         var verified = false;
@@ -66277,7 +66612,9 @@ pki.verifyCertificateChain = function(caStore, chain, options) {
     if(error === null &&
       (!first || (chain.length === 0 && (!parent || selfSigned)))) {
       // first check keyUsage extension and then basic constraints
-      var bcExt = cert.getExtension('basicConstraints');
+      // (by id: deprecated OIDs are also named 'basicConstraints', but only
+      // id-ce-basicConstraints 2.5.29.19 is valid, RFC 5280 4.2.1.9)
+      var bcExt = cert.getExtension({id: '2.5.29.19'});
       var keyUsageExt = cert.getExtension('keyUsage');
       if(keyUsageExt !== null) {
         // keyCertSign must be true and there must be a basic
@@ -66314,10 +66651,9 @@ pki.verifyCertificateChain = function(caStore, chain, options) {
           error: pki.certificateError.bad_certificate
         };
       }
-      // if error is not null and keyUsage is available, then we know it
-      // has keyCertSign and there is a basic constraints extension too,
-      // which means we can check pathLenConstraint (if it exists)
-      if(error === null && keyUsageExt !== null &&
+      // check pathLenConstraint (if it exists) regardless of whether the
+      // keyUsage extension is present (RFC 5280 6.1.4)
+      if(error === null && bcExt !== null &&
         'pathLenConstraint' in bcExt) {
         // pathLen is the maximum # of intermediate CA certs that can be
         // found between the current certificate and the end-entity (depth 0)
