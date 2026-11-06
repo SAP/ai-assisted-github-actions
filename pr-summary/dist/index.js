@@ -6275,7 +6275,12 @@ function isIasToken(decodedJwt) {
         return false;
     }
     try {
-        const issUrl = new URL(decodedJwt.iss);
+        // Identity providers can be configured to issue tokens with a schemeless `iss` claim,
+        // e.g. `tenant.accounts.ondemand.com` instead of `https://tenant.accounts.ondemand.com`.
+        const issWithScheme = URL.canParse(decodedJwt.iss)
+            ? decodedJwt.iss
+            : `https://${decodedJwt.iss}`;
+        const issUrl = new URL(issWithScheme);
         const hostname = issUrl.hostname.toLowerCase();
         return (hostname.endsWith('.accounts.ondemand.com') ||
             hostname.endsWith('.accounts400.ondemand.com'));
@@ -6478,10 +6483,13 @@ function getIssuerSubdomain(decodedJwt, isIasToken = false) {
     // For IAS tokens, prefer ias_iss claim over standard iss claim
     const issuer = isIasToken && decodedJwt?.ias_iss ? decodedJwt.ias_iss : decodedJwt?.iss;
     if (issuer) {
-        if (!(0, util_1.isValidUrl)(issuer)) {
+        // Identity providers can be configured to issue tokens with a schemeless `iss` claim,
+        // e.g. `tenant.accounts.ondemand.com` instead of `https://tenant.accounts.ondemand.com`.
+        const issWithScheme = url_1.URL.canParse(issuer) ? issuer : `https://${issuer}`;
+        if (!url_1.URL.canParse(issWithScheme)) {
             throw new Error(`Issuer URL in JWT is not a valid URL: "${issuer}".`);
         }
-        return getHost(new url_1.URL(issuer)).split('.')[0];
+        return getHost(new url_1.URL(issWithScheme)).split('.')[0];
     }
 }
 function getHost(url) {
