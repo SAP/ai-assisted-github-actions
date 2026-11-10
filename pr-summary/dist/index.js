@@ -149948,6 +149948,26 @@ function buildLlamaGuard38BFilter(type, categories) {
         config: Object.fromEntries([...categories].map(category => [category, true]))
     };
 }
+/**
+ * Convenience function to build an IBM Granite Guardian 4.1 filter.
+ *
+ * Note: Granite Guardian requires a separate backend call for each enabled
+ * category, so enabling several categories multiplies latency and cost.
+ * Prefer the catch-all `harm` category unless a specific category is needed.
+ * @param categories - Categories to be enabled for filtering. Provide at least one category.
+ * @param options - Additional options forwarded to the filter config, e.g. `enable_reasoning` to receive reasoning content for every configured category.
+ * @returns IBM Granite Guardian 4.1 filter configuration.
+ * @example buildGraniteGuardian41Filter(['harm'])
+ */
+function buildGraniteGuardian41Filter(categories, options) {
+    return {
+        type: 'granite_guardian_4_1',
+        config: {
+            categories: Object.fromEntries([...categories].map(category => [category, true])),
+            ...options
+        }
+    };
+}
 //# sourceMappingURL=filtering.js.map
 ;// CONCATENATED MODULE: ./node_modules/@sap-ai-sdk/orchestration/dist/util/module-config.js
 
@@ -152158,7 +152178,8 @@ async function resolveDeployment(opts) {
         }
     }
     if (!deployments.length) {
-        throw new Error(`No deployment matched the given criteria: ${JSON.stringify(opts)}. Make sure the deployment is successful, as it is a prerequisite before consuming orchestration or foundation models.`);
+        const { destination: _destination, ...loggable } = opts;
+        throw new Error(`No deployment matched the given criteria: ${JSON.stringify(loggable)}. Make sure the deployment is successful, as it is a prerequisite before consuming orchestration or foundation models.`);
     }
     return deployments[0];
 }
@@ -152345,8 +152366,8 @@ const PromptTemplatesApi = {
         }
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Delete all imperative prompt templates in the given scenario.
-     * @param scenario - Path parameter.
+     * Delete all imperatively managed prompt templates in a scenario
+     * @param scenario - Scenario field of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152356,9 +152377,9 @@ const PromptTemplatesApi = {
     }, PromptTemplatesApi._defaultBasePath),
     /**
      * List prompt template history
-     * @param scenario - Path parameter.
-     * @param version - Path parameter.
-     * @param name - Path parameter.
+     * @param scenario - Scenario field of the resource.
+     * @param version - Version field of the resource.
+     * @param name - Name field of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @param queryParameters - Object containing the following keys: $top, $skip.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152369,10 +152390,10 @@ const PromptTemplatesApi = {
         queryParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Delete all non-current versions (history) for the given prompt template
-     * @param scenario - Path parameter.
-     * @param version - Path parameter.
-     * @param name - Path parameter.
+     * Delete the version history of an imperatively managed prompt template
+     * @param scenario - Scenario field of the resource.
+     * @param version - Version field of the resource.
+     * @param name - Name field of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152382,7 +152403,7 @@ const PromptTemplatesApi = {
     }, PromptTemplatesApi._defaultBasePath),
     /**
      * Get prompt template by UUID
-     * @param promptTemplateId - Path parameter.
+     * @param promptTemplateId - UUID of the prompt template.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152391,8 +152412,8 @@ const PromptTemplatesApi = {
         headerParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Delete prompt template
-     * @param promptTemplateId - Path parameter.
+     * Delete an imperatively managed prompt template
+     * @param promptTemplateId - UUID of the prompt template.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152401,7 +152422,7 @@ const PromptTemplatesApi = {
         headerParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Import prompt template
+     * Create an imperatively managed prompt template from a file
      * @param body - Request body.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152423,8 +152444,8 @@ const PromptTemplatesApi = {
         }
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Export prompt template
-     * @param promptTemplateId - Path parameter.
+     * Download a prompt template as a file
+     * @param promptTemplateId - UUID of the prompt template.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152433,8 +152454,8 @@ const PromptTemplatesApi = {
         headerParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Parse prompt template by ID
-     * @param promptTemplateId - Path parameter.
+     * Fill the placeholders of a prompt template that is identified by its UUID
+     * @param promptTemplateId - UUID of the prompt template.
      * @param body - Request body.
      * @param queryParameters - Object containing the following keys: metadata.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
@@ -152450,10 +152471,10 @@ const PromptTemplatesApi = {
         queryParameters
     }, PromptTemplatesApi._defaultBasePath),
     /**
-     * Parse prompt template by name and version
-     * @param scenario - Path parameter.
-     * @param version - Path parameter.
-     * @param name - Path parameter.
+     * Fill the placeholders of a prompt template that is identified by its scenario, name and version
+     * @param scenario - Scenario field of the resource.
+     * @param version - Version field of the resource.
+     * @param name - Name field of the resource.
      * @param body - Request body.
      * @param queryParameters - Object containing the following keys: metadata.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group, AI-Resource-Group-Scope.
@@ -152484,7 +152505,7 @@ const PromptTemplatesApi = {
 const OrchestrationConfigsApi = {
     _defaultBasePath: undefined,
     /**
-     * List orchestration configs
+     * List imperatively and declaratively managed orchestration config
      * @param queryParameters - Object containing the following keys: scenario, name, version, retrieve, include_spec, includeSpec, resolve_template_ref, resolveTemplateRef, $top, $skip.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152494,7 +152515,7 @@ const OrchestrationConfigsApi = {
         queryParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Create or update an orchestration config
+     * Create or update an imperatively managed orchestration config
      * @param body - Request body.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152507,8 +152528,8 @@ const OrchestrationConfigsApi = {
         }
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Delete all imperative orchestration configs in the given scenario.
-     * @param scenario - Path parameter.
+     * Delete all imperatively managed orchestration configs in a scenario
+     * @param scenario - Scenario field of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152517,10 +152538,10 @@ const OrchestrationConfigsApi = {
         headerParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * List orchestration config history
-     * @param scenario - Path parameter.
-     * @param version - Path parameter.
-     * @param name - Path parameter.
+     * Obtain the history of edits of a particular imperatively managed orchestration config
+     * @param scenario - Scenario field of the resource.
+     * @param version - Version field of the resource.
+     * @param name - Name field of the resource.
      * @param queryParameters - Object containing the following keys: include_spec, includeSpec, resolve_template_ref, resolveTemplateRef, $top, $skip.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152531,10 +152552,10 @@ const OrchestrationConfigsApi = {
         queryParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Delete all non-current versions (history) for the given orchestration config
-     * @param scenario - Path parameter.
-     * @param version - Path parameter.
-     * @param name - Path parameter.
+     * Delete the version history of an imperatively managed orchestration config
+     * @param scenario - Scenario field of the resource.
+     * @param version - Version field of the resource.
+     * @param name - Name field of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152543,8 +152564,8 @@ const OrchestrationConfigsApi = {
         headerParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Get orchestration config by UUID
-     * @param orchestrationConfigId - Path parameter.
+     * Retrieve a orchestration config by its UUID
+     * @param orchestrationConfigId - UUID of the resource.
      * @param queryParameters - Object containing the following keys: resolve_template_ref, resolveTemplateRef.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152555,8 +152576,8 @@ const OrchestrationConfigsApi = {
         queryParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Delete orchestration config
-     * @param orchestrationConfigId - Path parameter.
+     * Delete an imperatively managed orchestration config
+     * @param orchestrationConfigId - UUID of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -152565,7 +152586,7 @@ const OrchestrationConfigsApi = {
         headerParameters
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Import orchestration config
+     * Create an imperatively managed orchestration config from a file
      * @param body - Request body.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
@@ -152587,8 +152608,8 @@ const OrchestrationConfigsApi = {
         }
     }, OrchestrationConfigsApi._defaultBasePath),
     /**
-     * Export orchestration config
-     * @param orchestrationConfigId - Path parameter.
+     * Download an orchestration config as a file
+     * @param orchestrationConfigId - UUID of the resource.
      * @param headerParameters - Object containing the following keys: AI-Resource-Group.
      * @returns The request builder, use the `execute()` method to trigger the request.
      */
@@ -159559,13 +159580,14 @@ function schemas_function(params) {
 /**
  * Generated by orval 🍺
  * Do not edit manually.
- * Prompt Registry API
- * Prompt Storage service for Design time & Runtime prompt templates.
- * OpenAPI spec version: 0.0.1
+ * Prompt Registry
+ * The Prompt Registry simplifies the lifecycle management of prompt templates across design and runtime environments. It comes with an imperative and declarative interface. This API specification describes the imperative API for managing prompt templates and also allows the retrieval of declarative managed prompt templates. A prompt template consists of chat messages where placeholders can be defined together with default values. Additional information such as metadata tags can be added to the resource as well.
+ * OpenAPI spec version: 0.14.4
  */
 
 /**
  * Create or update a prompt template
+ * @summary Prompt template create
  */
 const RegistryControllerPromptControllerCreateUpdatePromptTemplateHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159640,6 +159662,7 @@ const RegistryControllerPromptControllerCreateUpdatePromptTemplateResponse = /*#
 });
 /**
  * List prompt templates
+ * @summary Prompt template list
  */
 const registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault = `both`;
 const registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault = false;
@@ -159647,11 +159670,11 @@ const registryControllerPromptControllerListPromptTemplatesQueryTopMax = 500;
 const registryControllerPromptControllerListPromptTemplatesQuerySkipDefault = 0;
 const registryControllerPromptControllerListPromptTemplatesQuerySkipMin = 0;
 const RegistryControllerPromptControllerListPromptTemplatesQueryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault),
-    "includeSpec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault),
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.')),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerPromptControllerListPromptTemplatesQueryRetrieveDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to retrieve \'imperative\', \'declarative\', or \'both\'.')),
+    "includeSpec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerListPromptTemplatesQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether include the spec section or not.')),
     "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerPromptControllerListPromptTemplatesQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
     "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerPromptControllerListPromptTemplatesQuerySkipMin)), registryControllerPromptControllerListPromptTemplatesQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
@@ -159722,10 +159745,11 @@ const RegistryControllerPromptControllerListPromptTemplatesResponse = /*#__PURE_
     }))
 });
 /**
- * Delete all imperative prompt templates in the given scenario.
+ * Delete all imperatively managed prompt templates in a scenario
+ * @summary Prompt template scenario delete
  */
 const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.'))
 });
 const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159736,12 +159760,13 @@ const RegistryControllerPromptControllerDeletePromptTemplatesByScenarioResponse 
     "deleted": /*#__PURE__*/ mini_schemas_int()
 });
 /**
- * Delete all non-current versions (history) for the given prompt template
+ * Delete the version history of an imperatively managed prompt template
+ * @summary Prompt template history delete
  */
 const RegistryControllerPromptControllerDeletePromptTemplateHistoryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string(),
-    "version": /*#__PURE__*/ mini_schemas_string(),
-    "name": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.'))
 });
 const RegistryControllerPromptControllerDeletePromptTemplateHistoryHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159753,11 +159778,12 @@ const RegistryControllerPromptControllerDeletePromptTemplateHistoryResponse = /*
 });
 /**
  * List prompt template history
+ * @summary Prompt template history
  */
 const RegistryControllerPromptControllerListPromptTemplateHistoryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string(),
-    "version": /*#__PURE__*/ mini_schemas_string(),
-    "name": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.'))
 });
 const registryControllerPromptControllerListPromptTemplateHistoryQueryTopMax = 500;
 const registryControllerPromptControllerListPromptTemplateHistoryQuerySkipDefault = 0;
@@ -159834,9 +159860,10 @@ const RegistryControllerPromptControllerListPromptTemplateHistoryResponse = /*#_
 });
 /**
  * Get prompt template by UUID
+ * @summary Prompt template get
  */
 const RegistryControllerPromptControllerGetPromptTemplateByUuidParams = /*#__PURE__*/ schemas_object({
-    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the prompt template.'))
 });
 const RegistryControllerPromptControllerGetPromptTemplateByUuidHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159902,10 +159929,11 @@ const RegistryControllerPromptControllerGetPromptTemplateByUuidResponse = /*#__P
     }), /*#__PURE__*/ schemas_looseObject({})))
 });
 /**
- * Delete prompt template
+ * Delete an imperatively managed prompt template
+ * @summary Prompt template delete
  */
 const RegistryControllerPromptControllerDeletePromptTemplateParams = /*#__PURE__*/ schemas_object({
-    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the prompt template.'))
 });
 const RegistryControllerPromptControllerDeletePromptTemplateHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159915,7 +159943,8 @@ const RegistryControllerPromptControllerDeletePromptTemplateResponse = /*#__PURE
     "message": /*#__PURE__*/ mini_schemas_string()
 });
 /**
- * Import prompt template
+ * Create an imperatively managed prompt template from a file
+ * @summary Prompt template create
  */
 const RegistryControllerPromptControllerImportPromptTemplateHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159932,10 +159961,11 @@ const RegistryControllerPromptControllerImportPromptTemplateResponse = /*#__PURE
     "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
- * Export prompt template
+ * Download a prompt template as a file
+ * @summary Prompt template export
  */
 const RegistryControllerPromptControllerExportPromptTemplateParams = /*#__PURE__*/ schemas_object({
-    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the prompt template.'))
 });
 const RegistryControllerPromptControllerExportPromptTemplateHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -159943,14 +159973,15 @@ const RegistryControllerPromptControllerExportPromptTemplateHeader = /*#__PURE__
 });
 const RegistryControllerPromptControllerExportPromptTemplateResponse = /*#__PURE__*/ (/* unused pure expression or super */ null && (zod.unknown()));
 /**
- * Parse prompt template by ID
+ * Fill the placeholders of a prompt template that is identified by its UUID
+ * @summary Prompt template fill
  */
 const RegistryControllerPromptControllerParsePromptTemplateByIdParams = /*#__PURE__*/ schemas_object({
-    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid()
+    "promptTemplateId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the prompt template.'))
 });
 const registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault = false;
 const RegistryControllerPromptControllerParsePromptTemplateByIdQueryParams = /*#__PURE__*/ schemas_object({
-    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault)
+    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByIdQueryMetadataDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to not include metadata in the response.'))
 });
 const RegistryControllerPromptControllerParsePromptTemplateByIdHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -160038,16 +160069,17 @@ const RegistryControllerPromptControllerParsePromptTemplateByIdResponse = /*#__P
     }))
 });
 /**
- * Parse prompt template by name and version
+ * Fill the placeholders of a prompt template that is identified by its scenario, name and version
+ * @summary Prompt template fill
  */
 const RegistryControllerPromptControllerParsePromptTemplateByNameVersionParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string(),
-    "version": /*#__PURE__*/ mini_schemas_string(),
-    "name": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.'))
 });
 const registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault = false;
 const RegistryControllerPromptControllerParsePromptTemplateByNameVersionQueryParams = /*#__PURE__*/ schemas_object({
-    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault)
+    "metadata": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerPromptControllerParsePromptTemplateByNameVersionQueryMetadataDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to not include metadata in the response.'))
 });
 const RegistryControllerPromptControllerParsePromptTemplateByNameVersionHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use')),
@@ -160135,7 +160167,8 @@ const RegistryControllerPromptControllerParsePromptTemplateByNameVersionResponse
     }))
 });
 /**
- * Create or update an orchestration config
+ * Create or update an imperatively managed orchestration config
+ * @summary Orchestration config create
  */
 const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -160163,8 +160196,11 @@ const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -160197,8 +160233,11 @@ const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -160341,7 +160380,8 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                         "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                         "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                         "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                        "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
                 "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -160354,7 +160394,12 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                             }), /*#__PURE__*/ schemas_object({
                                 "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                 "config": /*#__PURE__*/ schemas_object({
@@ -160372,8 +160417,32 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                     "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                         "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -160402,8 +160471,32 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                         "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -160637,7 +160730,8 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                         "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                         "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                         "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                        "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                     }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 }),
                 "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -160650,7 +160744,12 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                             }), /*#__PURE__*/ schemas_object({
                                 "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                 "config": /*#__PURE__*/ schemas_object({
@@ -160668,8 +160767,32 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                     "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                         "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -160698,8 +160821,32 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                         "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerCreateUpdateOrchestrationConfigBodySpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -160830,7 +160977,8 @@ const RegistryControllerOrchestrationConfigControllerCreateUpdateOrchestrationCo
     "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
- * List orchestration configs
+ * List imperatively and declaratively managed orchestration config
+ * @summary Orchestration config list
  */
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryRetrieveDefault = `both`;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryIncludeSpecDefault = false;
@@ -160839,14 +160987,14 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQue
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipMin = 0;
 const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()),
-    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['both', 'imperative', 'declarative']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryRetrieveDefault),
-    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead')),
-    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
-    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
-    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "scenario": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "name": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.')),
+    "version": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "retrieve": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_enum(['both', 'imperative', 'declarative']), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryRetrieveDefault).check(/*#__PURE__*/ mini_schemas_describe('Whether to retrieve \'imperative\', \'declarative\', or \'both\'.')),
+    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead.')),
+    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Whether the spec should be included in the response.')),
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead.')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Whether a template reference should be resolved')),
     "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
     "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipMin)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
@@ -160870,8 +161018,11 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -160904,8 +161055,11 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -161055,7 +161209,8 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                             "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                             "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                             "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                            "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
                     "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -161068,7 +161223,12 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                                 }), /*#__PURE__*/ schemas_object({
                                     "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                     "config": /*#__PURE__*/ schemas_object({
@@ -161086,8 +161246,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                         "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -161116,8 +161300,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                             "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                                 "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                             })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -161351,7 +161559,8 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                             "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                             "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                             "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                            "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                         }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     }),
                     "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -161364,7 +161573,12 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                                 }), /*#__PURE__*/ schemas_object({
                                     "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                     "config": /*#__PURE__*/ schemas_object({
@@ -161382,8 +161596,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                         "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -161412,8 +161650,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                             "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                                 "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigsResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                             })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -161538,10 +161800,11 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigsRes
     }))
 });
 /**
- * Delete all imperative orchestration configs in the given scenario.
+ * Delete all imperatively managed orchestration configs in a scenario
+ * @summary Orchestration config scenario delete
  */
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsByScenarioParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.'))
 });
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsByScenarioHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -161551,12 +161814,13 @@ const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigsB
     "deleted": /*#__PURE__*/ mini_schemas_int()
 });
 /**
- * Delete all non-current versions (history) for the given orchestration config
+ * Delete the version history of an imperatively managed orchestration config
+ * @summary Orchestration config history delete
  */
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHistoryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string(),
-    "version": /*#__PURE__*/ mini_schemas_string(),
-    "name": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.'))
 });
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHistoryHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -161566,12 +161830,13 @@ const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHi
     "deleted": /*#__PURE__*/ mini_schemas_int()
 });
 /**
- * List orchestration config history
+ * Obtain the history of edits of a particular imperatively managed orchestration config
+ * @summary Orchestration config history
  */
 const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryParams = /*#__PURE__*/ schemas_object({
-    "scenario": /*#__PURE__*/ mini_schemas_string(),
-    "version": /*#__PURE__*/ mini_schemas_string(),
-    "name": /*#__PURE__*/ mini_schemas_string()
+    "scenario": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Scenario field of the resource.')),
+    "version": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Version field of the resource.')),
+    "name": /*#__PURE__*/ mini_schemas_string().check(/*#__PURE__*/ mini_schemas_describe('Name field of the resource.'))
 });
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault = false;
@@ -161579,10 +161844,10 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigHist
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipMin = 0;
 const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryParams = /*#__PURE__*/ schemas_object({
-    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead')),
-    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
-    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
-    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
+    "include_spec": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryIncludeSpecDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use includeSpec instead.')),
+    "includeSpec": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Whether include the spec section or not.')),
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead.')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Whether a template reference should be resolved')),
     "$top": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQueryTopMax))).check(/*#__PURE__*/ mini_schemas_describe('Number of results to return (1–500). When omitted the full result set is returned (up to the server limit).')),
     "$skip": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipMin)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryQuerySkipDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of results to skip before returning the page.'))
 });
@@ -161606,8 +161871,11 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigHist
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -161640,8 +161908,11 @@ const registryControllerOrchestrationConfigControllerListOrchestrationConfigHist
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -161791,7 +162062,8 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                             "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                             "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                             "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                            "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
                     "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -161804,7 +162076,12 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                                 }), /*#__PURE__*/ schemas_object({
                                     "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                     "config": /*#__PURE__*/ schemas_object({
@@ -161822,8 +162099,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                         "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -161852,8 +162153,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                             "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                                 "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                             })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -162087,7 +162412,8 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                             "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                             "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                             "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                            "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                            "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                         }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                     }),
                     "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -162100,7 +162426,12 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                         "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                    })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                                 }), /*#__PURE__*/ schemas_object({
                                     "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                     "config": /*#__PURE__*/ schemas_object({
@@ -162118,8 +162449,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                         "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -162148,8 +162503,32 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
                                         "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                         "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                    "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                    "config": /*#__PURE__*/ schemas_object({
+                                        "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                        "categories": /*#__PURE__*/ schemas_object({
+                                            "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                            "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                            "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                            "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                            "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                            "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                            "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                        }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                    "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                            "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                        }), /*#__PURE__*/ schemas_object({
+                                            "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                        })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                             "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                                 "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerListOrchestrationConfigHistoryResponseResourcesItemSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                             })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -162274,15 +162653,16 @@ const RegistryControllerOrchestrationConfigControllerListOrchestrationConfigHist
     }))
 });
 /**
- * Get orchestration config by UUID
+ * Retrieve a orchestration config by its UUID
+ * @summary Orchestration config get
  */
 const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidParams = /*#__PURE__*/ schemas_object({
-    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the resource.'))
 });
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault = false;
 const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryParams = /*#__PURE__*/ schemas_object({
-    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead')),
-    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
+    "resolve_template_ref": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidQueryResolveTemplateRefDefault).check(/*#__PURE__*/ mini_schemas_describe('DEPRECATED: Use resolveTemplateRef instead.')),
+    "resolveTemplateRef": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Whether a template reference should be resolved'))
 });
 const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -162304,8 +162684,11 @@ const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -162338,8 +162721,11 @@ const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault = 2;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax = 5;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault = true;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault = false;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneFiltersItemOneConfigProtectedMaterialCodeDefault = false;
+const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault = false;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin = 0;
 const registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax = 10000;
@@ -162487,7 +162873,8 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                         "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                         "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                         "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                        "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOnePromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 })).check(/*#__PURE__*/ mini_schemas_describe('Partial prompt templating configuration for use with config_ref overrides. model is optional so that only the prompt can be overridden without repeating the model config.\n')),
                 "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -162500,7 +162887,12 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                             }), /*#__PURE__*/ schemas_object({
                                 "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                 "config": /*#__PURE__*/ schemas_object({
@@ -162518,8 +162910,32 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                     "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                         "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -162548,8 +162964,32 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                         "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesOneFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -162783,7 +163223,8 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                         "version": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_string(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelVersionDefault).check(/*#__PURE__*/ mini_schemas_describe('Version of the model to be used')),
                         "params": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_record(/*#__PURE__*/ mini_schemas_string(), /*#__PURE__*/ schemas_unknown())).check(/*#__PURE__*/ mini_schemas_describe('Additional parameters for the model. Default values are used for mandatory parameters.')),
                         "timeout": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelTimeoutDefault).check(/*#__PURE__*/ mini_schemas_describe('Timeout for the LLM request in seconds. This parameter is currently ignored for Vertex AI models. Values above 600s may not be honored due to infrastructure connection limits; in practice this primarily affects non-streaming calls where the connection may be idle while waiting for a response.')),
-                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.'))
+                        "max_retries": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelMaxRetriesDefault).check(/*#__PURE__*/ mini_schemas_describe('Maximum number of retries for the LLM request. This parameter is currently ignored for Vertex AI models.')),
+                        "drop_unsupported_params": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemPromptTemplatingModelDropUnsupportedParamsDefault).check(/*#__PURE__*/ mini_schemas_describe('Controls behaviour when Chat Completions parameters not supported by the Responses API are present in the request. Only applies to models that use the Responses API (responsesApiOnly: true in the model registry). When true (default): unsupported params are silently dropped and reported in the X-Orchestration-Dropped-Model-Params response header. When false: any unsupported parameter causes a 400 error with an actionable message.\n'))
                     }).check(/*#__PURE__*/ mini_schemas_describe('The model and parameters to be used for the prompt templating. This is the model that will be used to generate the response.\n'))
                 }),
                 "filtering": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
@@ -162796,7 +163237,12 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_literal(0), /*#__PURE__*/ schemas_literal(2), /*#__PURE__*/ schemas_literal(4), /*#__PURE__*/ schemas_literal(6)])),
                                     "prompt_shield": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemOneConfigPromptShieldDefault).check(/*#__PURE__*/ mini_schemas_describe('Filter prompts for harmful content such as jailbreaks and prompt injections.'))
-                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety'))
+                                })).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Azure Content Safety')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
                             }), /*#__PURE__*/ schemas_object({
                                 "type": /*#__PURE__*/ mini_schemas_enum(['llama_guard_3_8b']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
                                 "config": /*#__PURE__*/ schemas_object({
@@ -162814,8 +163260,32 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringInputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (input filtering).'))
                     })).check(/*#__PURE__*/ mini_schemas_describe('List of provider type and filters')),
                     "output": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                         "filters": /*#__PURE__*/ schemas_array(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
@@ -162844,8 +163314,32 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
                                     "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "elections": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()),
                                     "code_interpreter_abuse": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean())
-                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))
-                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for Llama Guard 3 8B **DEPRECATED**: will be removed 2027-09-20.')), /*#__PURE__*/ schemas_object({
+                                "type": /*#__PURE__*/ mini_schemas_enum(['granite_guardian_4_1']).check(/*#__PURE__*/ mini_schemas_describe('Name of the filter provider type')),
+                                "config": /*#__PURE__*/ schemas_object({
+                                    "enable_reasoning": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_boolean(), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneFiltersItemThreeConfigEnableReasoningDefault).check(/*#__PURE__*/ mini_schemas_describe('Enable reasoning (think) mode for Granite Guardian. Applies to every configured category. Returns reasoning content when enabled, e.g. \'harm\': {\'verdict\': true, \'reasoning\': \'...\'}')),
+                                    "categories": /*#__PURE__*/ schemas_object({
+                                        "harm": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Catch-all criterion for generally harmful content.')),
+                                        "social_bias": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect prejudice or discrimination based on identity or protected characteristics.')),
+                                        "jailbreak": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect attempts to manipulate the model into producing harmful or otherwise undesired outputs.')),
+                                        "violence": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content promoting or depicting physical, mental, or sexual harm.')),
+                                        "profanity": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect offensive language or insults.')),
+                                        "sexual_content": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect explicit or suggestive material of a sexual nature.')),
+                                        "unethical_behavior": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_boolean()).check(/*#__PURE__*/ mini_schemas_describe('Detect content describing actions that violate moral or legal standards.'))
+                                    }).check(/*#__PURE__*/ mini_schemas_describe('Content criteria to evaluate. Note: Granite Guardian requires separate calls for each configured content category. Recommendation: Use only `harm` catch all content category.'))
+                                }).check(/*#__PURE__*/ mini_schemas_describe('Configuration for IBM Granite Guardian 4.1 filter provider.')),
+                                "target_selector": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_union([/*#__PURE__*/ schemas_object({
+                                        "after_last_role": /*#__PURE__*/ mini_schemas_enum(['system', 'user', 'assistant', 'developer', 'tool']).check(/*#__PURE__*/ mini_schemas_describe('Filter all messages after the last message with this role in the combined message list. If no message is scoped after applying this filter, then the filter is skipped.\n'))
+                                    }), /*#__PURE__*/ schemas_object({
+                                        "last_messages": /*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(1)).check(/*#__PURE__*/ mini_schemas_describe('Number of messages from the end of the combined message list to include in filtering. Must be >= 1 (0 is not allowed and returns 400 Bad Request). If specified value is larger than the combined message list length, all messages are filtered.\n'))
+                                    })])).check(/*#__PURE__*/ mini_schemas_describe('Selector for scoping input filtering to a subset of the combined message list (messages_history prepended to template). If not present, all input content is filtered.\n'))
+                            }).check(/*#__PURE__*/ mini_schemas_describe('Filter configuration for IBM Granite Guardian filter provider.'))])).check(/*#__PURE__*/ api_minLength(1)).check(/*#__PURE__*/ mini_schemas_describe('Configuration for content filtering services that should be used for the given filtering step (output filtering).')),
                         "stream_options": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ schemas_object({
                             "overlap": /*#__PURE__*/ mini_schemas_default(/*#__PURE__*/ mini_schemas_int().check(/*#__PURE__*/ api_gte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMin)).check(/*#__PURE__*/ api_lte(registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapMax)), registryControllerOrchestrationConfigControllerGetOrchestrationConfigByUuidResponseSpecModulesTwoItemFilteringOutputOneStreamOptionsOverlapDefault).check(/*#__PURE__*/ mini_schemas_describe('Number of characters that should be additionally sent to content filtering services from previous chunks as additional context.'))
                         })).check(/*#__PURE__*/ mini_schemas_describe('Stream options for output filtering. Will be ignored if stream is false.'))
@@ -162969,10 +163463,11 @@ const RegistryControllerOrchestrationConfigControllerGetOrchestrationConfigByUui
     }))
 });
 /**
- * Delete orchestration config
+ * Delete an imperatively managed orchestration config
+ * @summary Orchestration config delete
  */
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigParams = /*#__PURE__*/ schemas_object({
-    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the resource.'))
 });
 const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -162981,7 +163476,8 @@ const RegistryControllerOrchestrationConfigControllerDeleteOrchestrationConfigRe
     "message": /*#__PURE__*/ mini_schemas_string()
 });
 /**
- * Import orchestration config
+ * Create an imperatively managed orchestration config from a file
+ * @summary Orchestration config create
  */
 const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
@@ -162997,10 +163493,11 @@ const RegistryControllerOrchestrationConfigControllerImportOrchestrationConfigRe
     "version": /*#__PURE__*/ mini_schemas_string()
 });
 /**
- * Export orchestration config
+ * Download an orchestration config as a file
+ * @summary Orchestration config export
  */
 const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigParams = /*#__PURE__*/ schemas_object({
-    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid()
+    "orchestrationConfigId": /*#__PURE__*/ mini_schemas_uuid().check(/*#__PURE__*/ mini_schemas_describe('UUID of the resource.'))
 });
 const RegistryControllerOrchestrationConfigControllerExportOrchestrationConfigHeader = /*#__PURE__*/ schemas_object({
     "AI-Resource-Group": /*#__PURE__*/ schemas_optional(/*#__PURE__*/ mini_schemas_string()).check(/*#__PURE__*/ mini_schemas_describe('Specify a resource group id to use'))
