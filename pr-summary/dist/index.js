@@ -145438,19 +145438,34 @@ const assertValidPattern = (pattern) => {
  *
  * If the {@link MinimatchOptions.magicalBraces} option is used,
  * then braces (`{` and `}`) will be escaped.
+ *
+ * A leading `#` or `!` is escaped as well, so that the result is never a
+ * comment or a negated pattern. In `windowsPathsNoEscape` mode, a leading
+ * `!` is written as `@(!)`, because `[!` starts a negated class.
  */
 const escape_escape = (s, { windowsPathsNoEscape = false, magicalBraces = false, } = {}) => {
     // don't need to escape +@! because we escape the parens
     // that make those magic, and escaping ! as [!] isn't valid,
     // because [!]] is a valid glob class meaning not ']'.
-    if (magicalBraces) {
-        return windowsPathsNoEscape ?
-            s.replace(/[?*()[\]{}]/g, '[$&]')
-            : s.replace(/[?*()[\]\\{}]/g, '\\$&');
+    // However, at the start of the pattern, '!' negates the pattern and
+    // '#' makes it a comment, so the first character is handled below.
+    const e = magicalBraces ?
+        windowsPathsNoEscape ? s.replace(/[?*()[\]{}]/g, '[$&]')
+            : s.replace(/[?*()[\]\\{}]/g, '\\$&')
+        : windowsPathsNoEscape ? s.replace(/[?*()[\]]/g, '[$&]')
+            : s.replace(/[?*()[\]\\]/g, '\\$&');
+    const c = e.charAt(0);
+    if (c === '#') {
+        return (windowsPathsNoEscape ? '[#]' : '\\#') + e.slice(1);
     }
-    return windowsPathsNoEscape ?
-        s.replace(/[?*()[\]]/g, '[$&]')
-        : s.replace(/[?*()[\]\\]/g, '\\$&');
+    if (c === '!') {
+        // '[!]' can not be used, because '[!' starts a negated class, and
+        // '\' is a path separator in windowsPathsNoEscape mode. '@(!)'
+        // matches only '!'. If extglobs are disabled with `noext`, it
+        // matches nothing, rather than everything.
+        return (windowsPathsNoEscape ? '@(!)' : '\\!') + e.slice(1);
+    }
+    return e;
 };
 //# sourceMappingURL=escape.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/unescape.js
@@ -145474,6 +145489,10 @@ const escape_escape = (s, { windowsPathsNoEscape = false, magicalBraces = false,
  * unescaped.
  */
 const unescape_unescape = (s, { windowsPathsNoEscape = false, magicalBraces = true, } = {}) => {
+    // escape() writes a leading '!' as '@(!)' in windowsPathsNoEscape mode
+    if (windowsPathsNoEscape && s.startsWith('@(!)')) {
+        return ('!' + unescape_unescape(s.slice(4), { windowsPathsNoEscape, magicalBraces }));
+    }
     if (magicalBraces) {
         return windowsPathsNoEscape ?
             s.replace(/\[([^/\\])\]/g, '$1')
@@ -145510,10 +145529,28 @@ const minimatch = (p, pattern, options) => {
 // and then by pattern. When the cache is full, it becomes the old one,
 // and the objects used from the old one are moved back to a new one.
 // So it keeps 256 to 512 objects.
+// The patterns can come from users, so the cache is also bounded by
+// the total weight of the objects (see cacheWeight()), and an object
+// that is too heavy is never kept. Otherwise a few unique patterns
+// with large brace expansions would fill the heap.
 let cache = new Map();
 let oldCache = new Map();
 let cacheSize = 0;
+let cacheTotalWeight = 0;
 const cacheMax = 256;
+const cacheMaxWeight = 1 << 15;
+const cacheMaxEntryWeight = 1 << 12;
+// About the memory that a compiled object keeps: the pattern and the
+// expanded patterns, of which each row in set is made.
+const cacheWeight = (mm) => {
+    let w = mm.pattern.length;
+    for (const s of mm.globSet) {
+        w += s.length + 1;
+        if (w > cacheMaxEntryWeight)
+            break;
+    }
+    return w;
+};
 // tsc fails here if a new option is in neither type. Add it to
 // optionsKey() too.
 const allOptionsKeyed = true;
@@ -145630,16 +145667,23 @@ const cachedMinimatch = (pattern, options) => {
     mm =
         oldCache.get(key)?.get(pattern) ??
             new Minimatch(pattern, copyOptions(options));
-    if (cacheSize >= cacheMax) {
+    const weight = cacheWeight(mm);
+    // too big to keep, so it is compiled again each time
+    if (weight > cacheMaxEntryWeight)
+        return mm;
+    if (cacheSize >= cacheMax ||
+        cacheTotalWeight + weight > cacheMaxWeight) {
         oldCache = cache;
         cache = new Map();
         cacheSize = 0;
+        cacheTotalWeight = 0;
     }
     let byPattern = cache.get(key);
     if (!byPattern)
         cache.set(key, (byPattern = new Map()));
     byPattern.set(pattern, mm);
     cacheSize++;
+    cacheTotalWeight += weight;
     return mm;
 };
 /* c8 ignore start */
@@ -145705,7 +145749,20 @@ const braceExpand = (pattern, options = {}) => {
         // shortcut. no need to expand.
         return [pattern];
     }
-    return esm_expand(pattern, { max: options.braceExpandMax });
+    // brace-expansion turns each escaped backslash '\\' into a single '\',
+    // which then escapes the next character instead, and can turn an
+    // escaped magic character (for example '\\\*') into a live one.
+    // Double every pair, so an escaped backslash comes back out still
+    // escaped. The parity of each run of backslashes is unchanged.
+    let p = pattern.replace(/\\\\/g, '\\\\\\\\');
+    // brace-expansion does not know about [...] classes. In
+    // windowsPathsNoEscape mode, escape() writes a literal brace as '[{]'
+    // or '[}]'. Escape the brace for brace-expansion, which removes that
+    // backslash again, leaving '[{]' or '[}]'.
+    if (options.windowsPathsNoEscape || options[AWE_KEY] === false) {
+        p = p.replace(/\[([{}])\]/g, '[\\$1]');
+    }
+    return esm_expand(p, { max: options.braceExpandMax });
 };
 minimatch.braceExpand = braceExpand;
 // A numeric range with at least this many values is matched as one
@@ -145788,6 +145845,33 @@ const esm_literal = (pattern, noext) => {
         }
     }
     return lit;
+};
+// The matching engine compiles and walks extglobs recursively, so a
+// path portion with very many extglobs (nested, such as `*(*(*(a)))`,
+// or in a row, such as `?(a)?(a)?(a)`) can exhaust the call stack.
+// Portions with more than this many extglobs are rejected.
+const MAX_EXTGLOBS = 256;
+// The number of extglob openers, such as `*(`, in a path portion
+// pattern. Chars in a class are counted too, so this can be more than
+// the number of extglobs, but never less.
+const extglobCount = (pattern) => {
+    let n = 0;
+    for (let i = 0; i < pattern.length - 1; i++) {
+        const c = pattern.charAt(i);
+        if (c === '\\') {
+            i++;
+        }
+        else if ('+@!?*'.includes(c) && pattern.charAt(i + 1) === '(') {
+            n++;
+            i++;
+        }
+    }
+    return n;
+};
+const assertValidExtglobs = (pattern) => {
+    if (extglobCount(pattern) > MAX_EXTGLOBS) {
+        throw new TypeError('pattern has too many extglobs');
+    }
 };
 // True if the portion pattern has the same meaning as an alternative
 // inside `@(...)`. It must not have a `|` or `)` that is not in a
@@ -146196,6 +146280,10 @@ class Minimatch {
                     const [first, ...rest] = g;
                     const alts = g.map(i => this.globParts[i][k]);
                     const glob = `@(${alts.join('|')})`;
+                    // merging is only an optimization, so leave the rows as they
+                    // are if the merged portion would have too many extglobs
+                    if (extglobCount(glob) > MAX_EXTGLOBS)
+                        continue;
                     this.globParts[first][k] = glob;
                     this.set[first][k] = this.parse(glob);
                     for (const i of rest)
@@ -147147,6 +147235,8 @@ class Minimatch {
             return PENDING;
         let m = this.#matchers.get(pattern);
         if (!m) {
+            if (!noext)
+                assertValidExtglobs(pattern);
             m = new Matcher(pattern, {
                 nocase,
                 noext,
