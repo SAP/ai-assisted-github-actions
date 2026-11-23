@@ -44924,6 +44924,7 @@ Address all questions regarding this license to:
   tjw@cs.Stanford.EDU
 */
 var forge = __nccwpck_require__(88561);
+__nccwpck_require__(97456);
 
 module.exports = forge.jsbn = forge.jsbn || {};
 
@@ -44994,7 +44995,7 @@ function am3(i,x,w,j,c,n) {
 }
 
 // node.js (no browser)
-if(typeof(navigator) === 'undefined')
+if(forge.util.isNodejs)
 {
    BigInteger.prototype.am = am3;
    dbits = 28;
@@ -46651,7 +46652,8 @@ if(typeof(console) !== 'undefined' && 'log' in console) {
  * that could otherwise be limited by a user config.
  */
 if(sConsoleLogger !== null &&
-  typeof window !== 'undefined' && window.location
+  typeof window !== 'undefined' && window.location && window.location.href &&
+  typeof URL === 'function'
 ) {
   var query = new URL(window.location.href).searchParams;
   if(query.has('console.level')) {
@@ -52757,12 +52759,12 @@ prng.create = function(plugin) {
         if(err) {
           return callback(err);
         }
-        callback(null, bytes.toString());
+        callback(null, bytes.toString('binary'));
       });
     };
     // use nodejs sync API
     ctx.seedFileSync = function(needed) {
-      return _crypto.randomBytes(needed).toString();
+      return _crypto.randomBytes(needed).toString('binary');
     };
   } else {
     ctx.seedFile = function(needed, callback) {
@@ -53378,7 +53380,9 @@ forge.rc2.expandKey = function(key, effKeyBits) {
   var T = key.length();
   var T1 = effKeyBits;
   var T8 = Math.ceil(T1 / 8);
-  var TM = 0xff >> (T1 & 0x07);
+  // RFC 2268 section 2: TM = 255 MOD 2^(8 + T1 - 8*T8), so shift out
+  // 8*T8 - T1 = (-T1) MOD 8 bits
+  var TM = 0xff >> (-T1 & 0x07);
   var i;
 
   for(i = T; i < 128; i++) {
@@ -55159,8 +55163,14 @@ pki.privateKeyFromAsn1 = function(obj) {
     throw error;
   }
 
-  // Note: Version is currently ignored.
-  // capture.privateKeyVersion
+  // only two-prime keys (version 0) are supported; a multi-prime key
+  // (RFC 8017 A.1.2, version 1 with otherPrimeInfos) read as a two-prime key
+  // gives invalid signatures that reveal factors of the modulus
+  if(capture.privateKeyVersion !== '\x00' || obj.value.length !== 9) {
+    throw new Error('Cannot read private key. ' +
+      'Only two-prime RSAPrivateKey version 0 is supported.');
+  }
+
   // FIXME: inefficient, get a BigInteger that uses byte strings
   var n, e, d, p, q, dP, dQ, qInv;
   n = forge.util.createBuffer(capture.privateKeyModulus).toHex();
@@ -57165,7 +57175,7 @@ ssh.getPublicKeyFingerprint = function(key, options) {
 function _addBigIntegerToBuffer(buffer, val) {
   var hexVal = val.toString(16);
   // ensure 2s complement +ve
-  if(hexVal[0] >= '8') {
+  if(hexVal[0] >= '8' && (hexVal.length % 2 === 0)) {
     hexVal = '00' + hexVal;
   }
   var bytes = forge.util.hexToBytes(hexVal);
@@ -63144,17 +63154,20 @@ util.encode64 = function(input, maxline) {
   var chr1, chr2, chr3;
   var i = 0;
   while(i < input.length) {
-    chr1 = input.charCodeAt(i++);
+    // use only the low byte of each character (#932); chr2 and chr3 are
+    // masked where they're used instead, since past the end of the input
+    // they're NaN, which the padding checks below rely on
+    chr1 = input.charCodeAt(i++) & 0xff;
     chr2 = input.charCodeAt(i++);
     chr3 = input.charCodeAt(i++);
 
     // encode 4 character group
     line += _base64.charAt(chr1 >> 2);
-    line += _base64.charAt(((chr1 & 3) << 4) | (chr2 >> 4));
+    line += _base64.charAt(((chr1 & 3) << 4) | ((chr2 & 0xff) >> 4));
     if(isNaN(chr2)) {
       line += '==';
     } else {
-      line += _base64.charAt(((chr2 & 15) << 2) | (chr3 >> 6));
+      line += _base64.charAt(((chr2 & 15) << 2) | ((chr3 & 0xff) >> 6));
       line += isNaN(chr3) ? '=' : _base64.charAt(chr3 & 63);
     }
 
@@ -146923,6 +146936,7 @@ function expand_(str, max, maxLength, maxDepth, depth, maxRewrites, budget, isTo
     }
     return acc;
 }
+
 //# sourceMappingURL=index.js.map
 ;// CONCATENATED MODULE: ./node_modules/minimatch/dist/esm/assert-valid-pattern.js
 const MAX_PATTERN_LENGTH = 1024 * 64;
